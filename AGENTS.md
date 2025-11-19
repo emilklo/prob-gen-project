@@ -1,4 +1,4 @@
-# project spesfication
+# Project Spesfication
 
 ## Core Directive: 
 This project exclusively uses uv for all Python package management and script execution.
