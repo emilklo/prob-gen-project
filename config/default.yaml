@@ -8,3 +8,7 @@ model:
   rnn:
     hidden_size: 256
     num_layers: 1
+data:
+  path: "data/kitti"
+  img_size: 256
+  sequence_length: 5 # Short sequence for mock data test

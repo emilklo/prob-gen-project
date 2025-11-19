@@ -1,4 +1,4 @@
-# Python-generated files
+@# Python-generated files
 __pycache__/
 *.py[oc]
 build/
@@ -10,3 +10,7 @@ wheels/
 .venv
 
 xx*/
+
+image_02/
+
+*.pth
