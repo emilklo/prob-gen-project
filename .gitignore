@@ -13,7 +13,7 @@ xx*/
 
 image_02/
 
-*.pth
+
 .env
 
 logs/
