@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 
 from config.logging import get_logger
 from data.odometry import KITTIOdometryDataset
-from models.mdrnn_pose import DreamerMDRNN
+from models.mdnrnn_pose import DreamerMDRNN
 from models.world_model import ConvVAE
 from utils.device import get_compute_device
 
