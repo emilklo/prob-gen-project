@@ -1,14 +1,26 @@
+run_name: "vae_z64_img128"  # Custom run name for output folder
+
 training:
-  batch_size: 32
+  batch_size: 32          # Reduced for larger images (128x128)
   learning_rate: 1e-3
-  epochs: 100
+  epochs: 100             # More epochs for better convergence
+
 model:
   vae:
-    latent_dim: 32
+    latent_dim: 64        # Increased from 32 for better reconstruction
   rnn:
     hidden_size: 256
     num_layers: 1
+
 data:
-  path: "data/kitti"
-  img_size: 256
-  sequence_length: 5 # Short sequence for mock data test
+  path: "data/kitti"      # Expected structure: data/kitti/<seq>/image_02/data/*.png
+  # For square images, use img_size:
+  # img_size: 128
+  # For rectangular images, use img_height and img_width:
+  img_height: 128
+  img_width: 416          # KITTI aspect ratio ~3.25:1
+  sequence_length: 1      # 1 for VAE training (single frames)
+
+visualization:
+  save_every: 10          # Save reconstruction samples every N epochs
+  num_samples: 8          # Number of samples to visualize
