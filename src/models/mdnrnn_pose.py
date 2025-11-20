@@ -12,6 +12,7 @@ class DreamerMDRNN(nn.Module):
         self,
         latent_dim: int = LATENT_DIM,
         hidden_size: int = 256,
+        num_layers: int = 2,
         num_gaussians: int = 5,
     ):
         """
@@ -27,7 +28,12 @@ class DreamerMDRNN(nn.Module):
         # --- 1. The Memory (LSTM) ---
         # Input: z_t (Visual Latent)
         # Output: hidden state h_t (Context)
-        self.lstm = nn.LSTM(latent_dim, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(
+            latent_dim,
+            hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+        )
 
         # --- 2. The Vision Heads (MDN) ---
         # Pi: Mixing Coefficients (Which Gaussian to use?)

@@ -1,7 +1,7 @@
 import argparse
 import json
 from dataclasses import asdict
-from src.utils.device import get_compute_device, get_config, Config
+from src.utils.device import get_config, Config
 
 import os
 import torch

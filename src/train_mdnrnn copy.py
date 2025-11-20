@@ -41,6 +41,7 @@ def training(cfg: Config):
 
     dataset = KITTIOdometryDataset(
         root_dir=cfg.data.path,
+        pose_dir="dataset/poses",  # Ensure this path is in config or correct
         seq_len=cfg.data.rnn_sequence_length,
         transform=transform,
     )
@@ -62,7 +63,7 @@ def training(cfg: Config):
     ).to(device)
 
     # TODO: Add 'vae_checkpoint' to your config file to avoid hardcoding
-    vae_path = "outputs/vae_z64_img128_mps/checkpoints/vae_final.pth"
+    vae_path = "outputs/vae_z64_img128/checkpoints/vae_final.pth"
 
     if os.path.exists(vae_path):
         print(f"[-] Loading VAE weights from {vae_path}")

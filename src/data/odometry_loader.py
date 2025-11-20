@@ -10,7 +10,7 @@ class KITTIOdometryDataset(Dataset):
     def __init__(
         self,
         root_dir: str,
-        pose_dir: str,
+        pose_dir: str = "data/kitti/poses",
         train_sequences: list | None = None,
         seq_len: int = 10,
         transform=None,
@@ -63,7 +63,7 @@ class KITTIOdometryDataset(Dataset):
         and adds valid sliding-window indices to the master list.
         """
         # 1. Find Images
-        img_dir = os.path.join(self.root_dir, seq_id, "image_2")
+        img_dir = os.path.join(self.root_dir, seq_id, "image_02/data")
         # Glob is fine here because we are inside ONE sequence
         img_paths = sorted(glob.glob(os.path.join(img_dir, "*.png")))
 
@@ -74,6 +74,7 @@ class KITTIOdometryDataset(Dataset):
         # 2. Load Poses & Calculate Deltas
         pose_file = os.path.join(self.pose_dir, f"{seq_id}.txt")
         if not os.path.exists(pose_file):
+            print("file name", pose_file)
             print(f"Warning: No pose file found for {seq_id}")
             return
 
@@ -169,4 +170,64 @@ class KITTIOdometryDataset(Dataset):
 
 
 if __name__ == "__main__":
-    pass
+    from torch.utils.data import DataLoader
+    from torchvision import transforms
+    from src.utils.device import get_config
+
+    # 1. Load Configuration
+    cfg = get_config()
+    print("[-] Configuration loaded.")
+
+    # 2. Define Transform (Crucial: PIL -> Tensor)
+    # Resizing to standard KITTI size or smaller for testing
+
+    img_height = cfg.data.img_height
+    img_width = cfg.data.img_width
+
+    tf = transforms.Compose(
+        [transforms.Resize((img_height, img_width)), transforms.ToTensor()]
+    )
+
+    # 3. Initialize Dataset
+    try:
+        dataset = KITTIOdometryDataset(
+            root_dir=cfg.data.path,
+            train_sequences=None,  # Default to all
+            seq_len=cfg.data.rnn_sequence_length,
+            transform=tf,
+        )
+    except KeyError as e:
+        print(f"Error: Missing key in YAML file: {e}")
+        exit(1)
+
+    # 4. Test Data Loading
+    batch_size = 4
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    print("\n[-] Testing Batch Generation...")
+    try:
+        # Fetch one batch
+        images, poses = next(iter(loader))
+
+        print(f"    Batch Size:      {batch_size}")
+        print(f"    Sequence Length: {cfg.data.rnn_sequence_length}")
+        print("-" * 30)
+        print(f"    Image Tensor Shape: {images.shape}")
+        # Expected: (Batch, Seq_Len, Channels, Height, Width)
+
+        print(f"    Pose Tensor Shape:  {poses.shape}")
+        # Expected: (Batch, Seq_Len, 6)
+
+        print("-" * 30)
+        print("    Data Range Check:")
+        print(f"    Images (min/max): {images.min():.2f} / {images.max():.2f}")
+        print(f"    Poses  (mean):    {poses.mean():.4f}")
+
+        print("\n[+] Test Successful.")
+
+    except Exception as e:
+        print(f"\n[!] Test Failed: {e}")
+        # Print full traceback for debugging
+        import traceback
+
+        traceback.print_exc()
