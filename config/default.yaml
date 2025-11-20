@@ -11,6 +11,7 @@ model:
   rnn:
     hidden_size: 256
     num_layers: 1
+    sequence_length: 5
 
 data:
   path: "data/kitti"      # Expected structure: data/kitti/<seq>/image_02/data/*.png
@@ -19,7 +20,8 @@ data:
   # For rectangular images, use img_height and img_width:
   img_height: 128
   img_width: 416          # KITTI aspect ratio ~3.25:1
-  sequence_length: 1      # 1 for VAE training (single frames)
+  vea_sequence_length: 1
+  rnn_sequence_length: 5      # 5 for RNN training
 
 visualization:
   save_every: 10          # Save reconstruction samples every N epochs

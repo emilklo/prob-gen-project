@@ -1,6 +1,7 @@
 import argparse
-import yaml
-from src.utils.device import get_compute_device
+import json
+from dataclasses import asdict
+from src.utils.device import get_compute_device, get_config, Config
 
 import os
 import torch
@@ -35,40 +36,39 @@ def loss_function(recon_x, x, mu, logvar, beta=1.0):
     return recon_loss + beta * kld, recon_loss, kld
 
 
-def train_vae(cfg):
+def train_vae(cfg: Config):
     """Training loop for VAE with reconstruction quality monitoring."""
-    device = get_compute_device()
+    # cfg.device is a string, but we can also use get_compute_device() for the torch object
+    # or just torch.device(cfg.device)
+    device = torch.device(cfg.device)
     print(f"Training VAE on {device}")
 
     # Config
-    batch_size = cfg["training"]["batch_size"]
-    lr = float(cfg["training"]["learning_rate"])
-    epochs = cfg["training"]["epochs"]
-    latent_dim = cfg["model"]["vae"]["latent_dim"]
+    batch_size = cfg.training.batch_size
+    lr = cfg.training.learning_rate
+    epochs = cfg.training.epochs
+    latent_dim = cfg.model.vae.latent_dim
 
     # Support both square (img_size) and rectangular (img_height, img_width)
-    if "img_size" in cfg["data"]:
-        img_height = cfg["data"]["img_size"]
-        img_width = cfg["data"]["img_size"]
-    else:
-        img_height = cfg["data"]["img_height"]
-        img_width = cfg["data"]["img_width"]
 
-    # Visualization config (with defaults)
-    vis_cfg = cfg.get("visualization", {})
-    save_every = vis_cfg.get("save_every", 5)  # Save reconstructions every N epochs
-    num_samples = vis_cfg.get("num_samples", 8)  # Number of samples to visualize
+    img_height = cfg.data.img_height
+    img_width = cfg.data.img_width
+
+    # Visualization config
+    save_every = cfg.visualization.save_every
+    num_samples = cfg.visualization.num_samples
 
     # Create run name based on config
-    if img_height == img_width:
-        run_name = cfg.get(
-            "run_name",
-            f"vae_z{latent_dim}_img{img_height}_ep{epochs}_lr{lr}_bs{batch_size}",
-        )
+    if cfg.run_name == "default_run":  # Check if it's the default fallback or from yaml
+        if img_height == img_width:
+            run_name = (
+                f"vae_z{latent_dim}_img{img_height}_ep{epochs}_lr{lr}_bs{batch_size}"
+            )
+        else:
+            run_name = f"vae_z{latent_dim}_img{img_height}x{img_width}_ep{epochs}"
     else:
-        run_name = cfg.get(
-            "run_name", f"vae_z{latent_dim}_img{img_height}x{img_width}_ep{epochs}"
-        )
+        run_name = cfg.run_name
+
     print(f"Run name: {run_name}")
 
     # Output directories based on run name
@@ -81,17 +81,15 @@ def train_vae(cfg):
     os.makedirs(samples_dir, exist_ok=True)
 
     # Save config to run directory
-    import json
-
     with open(f"outputs/{run_name}/config.json", "w") as f:
-        json.dump(cfg, f, indent=2)
+        json.dump(asdict(cfg), f, indent=2)
 
     # Data
     transform = transforms.Compose(
         [transforms.Resize((img_height, img_width)), transforms.ToTensor()]
     )
     dataset = KITTIDataset(
-        root_dir=cfg["data"]["path"], sequence_length=1, transform=transform
+        root_dir=cfg.data.path, sequence_length=1, transform=transform
     )
     dataloader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True
@@ -115,7 +113,11 @@ def train_vae(cfg):
     loss_history = {"total": [], "recon": [], "kld": [], "psnr": []}
 
     # Get a fixed batch for consistent visualization
-    fixed_batch = next(iter(dataloader)).squeeze(1).to(device)
+    try:
+        fixed_batch = next(iter(dataloader)).squeeze(1).to(device)
+    except StopIteration:
+        print("ERROR: Dataloader is empty.")
+        return
 
     model.train()
     for epoch in range(epochs):
@@ -200,7 +202,7 @@ def train_vae(cfg):
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "loss_history": loss_history,
-                    "config": cfg,
+                    "config": asdict(cfg),
                 },
                 f"{checkpoint_dir}/vae_epoch_{epoch+1}.pth",
             )
@@ -213,7 +215,7 @@ def train_vae(cfg):
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "loss_history": loss_history,
-            "config": cfg,
+            "config": asdict(cfg),
         },
         f"{checkpoint_dir}/vae_final.pth",
     )
@@ -227,9 +229,9 @@ def train_vae(cfg):
     print(f"Visualizations saved to: {recon_dir}/")
 
 
-def train_rnn(cfg):
+def train_rnn(cfg: Config):
     """Training loop for RNN (requires trained VAE)."""
-    device = get_compute_device()
+    device = torch.device(cfg.device)
     print(f"Training RNN on {device}")
     # Implementation goes here
     pass
@@ -237,9 +239,7 @@ def train_rnn(cfg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train World Model components")
-    parser.add_argument(
-        "--config", type=str, default="config/default.yaml", help="Path to config file"
-    )
+    # Removed --config argument as we now use automatic config loading
     parser.add_argument(
         "--mode",
         type=str,
@@ -250,8 +250,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with open(args.config, "r") as f:
-        cfg = yaml.safe_load(f)
+    # Load config automatically
+    cfg = get_config()
 
     if args.mode == "vae":
         train_vae(cfg)

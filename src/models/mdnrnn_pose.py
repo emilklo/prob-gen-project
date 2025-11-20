@@ -4,13 +4,15 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Tuple, Optional
 
-from src.data.loaders import KITTIDataset
-from src.utils.device import get_compute_device
+from config.config import LATENT_DIM
 
 
 class DreamerMDRNN(nn.Module):
     def __init__(
-        self, latent_dim: int = 32, hidden_size: int = 256, num_gaussians: int = 5
+        self,
+        latent_dim: int = LATENT_DIM,
+        hidden_size: int = 256,
+        num_gaussians: int = 5,
     ):
         """
         MDRNN with a Dual Head:
@@ -160,52 +162,3 @@ class DreamerMDRNN(nn.Module):
             z_next = sampled_mu + (sampled_sigma * epsilon * np.sqrt(temperature))
 
             return z_next.unsqueeze(1), pose_out, hidden
-
-
-def training(cfg):
-    import torchvision.transforms as transforms
-    from torch.utils.data import DataLoader
-
-    img_size = cfg["data"]["img_size"]
-    batch_size = cfg["training"]["batch_size"]
-
-    transform = transforms.Compose(
-        [transforms.Resize((img_size, img_size)), transforms.ToTensor()]
-    )
-    dataset = KITTIDataset(
-        root_dir=cfg["data"]["path"], sequence_length=1, transform=transform
-    )
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    device = get_compute_device()
-    model = DreamerMDRNN().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # Training Loop
-    for batch in dataloader:
-        # Data: (Batch, Seq_Len, Latent_Dim)
-        z_seq = batch["z_vector"].to(device)
-        # Data: (Batch, Seq_Len, 6)
-        pose_seq = batch["pose_delta"].to(device)
-
-        # Input is 0..T-1, Target is 1..T
-        z_input = z_seq[:, :-1, :]
-        z_target = z_seq[:, 1:, :]
-        pose_target = pose_seq[:, 1:, :]
-
-        optimizer.zero_grad()
-
-        pi, mu, sigma, pred_pose, _ = model(z_input)
-
-        # Calculate Loss
-        # WEIGHT IS CRITICAL: 100.0 makes 0.001 look like 0.1
-        loss, l_mdn, l_pose = model.loss_function(
-            z_target, pose_target, pi, mu, sigma, pred_pose, pose_weight=100.0
-        )
-
-        loss.backward()
-
-        # Clip gradients (Standard RNN practice)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-
-        optimizer.step()

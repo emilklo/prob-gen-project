@@ -1,0 +1,14 @@
+training:
+  batch_size: 256       # H100 has 80GB VRAM, feed it!
+  learning_rate: 0.0005 # Lower LR for stability with large batches
+  epochs: 100           # Let it converge fully
+
+model:
+  vae:
+    latent_dim: 256     # High capacity to store "Lane markings", "Traffic Signs"
+    
+data:
+  # High resolution. Divisible by 16. 
+  # Captures distant objects which reduces drift.
+  img_height: 192       
+  img_width: 640

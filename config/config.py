@@ -1,5 +1,4 @@
 """Project-wide constant values."""
 
-
-__all__ = [
-]
+LATENT_DIM = 64
+__all__ = []

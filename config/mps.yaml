@@ -1,0 +1,13 @@
+training:
+  batch_size: 32        # Low to save RAM
+  learning_rate: 0.001
+  epochs: 5             # Just to check if loss goes down
+
+model:
+  vae:
+    latent_dim: 64      # Smaller vector for easier convergence
+    
+data:
+  # Maintains 3.25:1 ratio, very fast to process
+  img_height: 128       
+  img_width: 416
