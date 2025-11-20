@@ -102,9 +102,7 @@ def train_vae(cfg: Config):
         return
 
     # Model
-    model = ConvVAE(
-        latent_dim=latent_dim, img_height=img_height, img_width=img_width
-    ).to(device)
+    model = ConvVAE(latent_dim=latent_dim, img_height=img_height, img_width=img_width).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
