@@ -14,6 +14,7 @@ model:
 
 data:
   path: "data/kitti"      # Expected structure: data/kitti/<seq>/image_02/data/*.png
+  pose_path: "data/kitti/poses"  # Path to ground truth poses
   # For square images, use img_size:
   # img_size: 128
   # For rectangular images, use img_height and img_width:

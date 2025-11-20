@@ -86,8 +86,35 @@ def training(cfg: Config):
 
     # --- 5. Training Loop ---
     best_loss = float("inf")
+    start_epoch = 0
+    best_model_path = os.path.join(output_dir, "rnn_best.pth")
+    LOAD_BEST = True
+    if LOAD_BEST:
+        if os.path.exists(best_model_path):
+            print(
+                f"[-] LOAD_BEST=True: Loading existing checkpoint from {best_model_path}"
+            )
+            checkpoint = torch.load(
+                best_model_path, map_location=device, weights_only=False
+            )
 
-    for epoch in range(cfg.training.epochs):
+            # Load weights
+            rnn.load_state_dict(checkpoint["model_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+            # Load training state
+            best_loss = checkpoint["loss"]
+            start_epoch = checkpoint["epoch"]
+
+            print(
+                f"    [*] Loaded successfully. Resuming from Epoch {start_epoch+1} with Best Loss: {best_loss:.4f}"
+            )
+        else:
+            print(
+                f"[!] LOAD_BEST=True, but {best_model_path} does not exist. Starting from scratch."
+            )
+
+    for epoch in range(start_epoch, cfg.training.epochs):
         rnn.train()
         epoch_loss = 0
         epoch_pose_loss = 0

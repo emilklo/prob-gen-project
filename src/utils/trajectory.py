@@ -6,7 +6,7 @@ from src.data.odometry_loader import KITTIOdometryDataset
 from src.models.mdnrnn_pose import DreamerMDRNN
 from src.models.world_model import ConvVAE
 import torchvision.transforms as transforms
-from src.utils.device import get_compute_device
+from src.utils.device import get_compute_device, get_config
 
 
 def euler_to_matrix(roll, pitch, yaw):
@@ -64,7 +64,9 @@ def integrate_path(deltas_6d):
 
 def run_evaluation():
     device = get_compute_device()
-    img_height, img_width = 128, 416
+    cfg = get_config()
+
+    img_height, img_width = cfg.data.img_height, cfg.data.img_width
 
     # 1. Load Data (Validation Sequence, e.g., 00 or 07)
     transform = transforms.Compose(
@@ -77,8 +79,7 @@ def run_evaluation():
     # Note: We set seq_len=1 because we will manually loop through the frames
     # to simulate a continuous drive.
     dataset = KITTIOdometryDataset(
-        root_dir="data/kitti",
-        pose_dir="dataset/poses",
+        root_dir=cfg.data.path,
         train_sequences=["00"],  # Evaluate on Sequence 00
         seq_len=2,  # Minimal context needed to grab pairs
         transform=transform,
@@ -90,7 +91,7 @@ def run_evaluation():
     rnn = DreamerMDRNN(latent_dim=128, hidden_size=512).to(device)
 
     # --- PATHS (UPDATE THESE) ---
-    vae_path = "outputs/YOUR_VAE_FOLDER/checkpoints/vae_final.pth"
+    vae_path = "outputs/vae_z64_img128_mps/checkpoints/vae_final.pth"
     rnn_path = "outputs/rnn_checkpoints/rnn_final.pth"
 
     vae.load_state_dict(torch.load(vae_path, map_location=device)["model_state_dict"])

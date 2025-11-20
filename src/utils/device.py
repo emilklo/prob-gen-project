@@ -46,6 +46,7 @@ class ModelConfig:
 @dataclass
 class DataConfig:
     path: str
+    pose_path: str
     img_height: int
     img_width: int
     vea_sequence_length: int
