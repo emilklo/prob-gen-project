@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class ConvVAE(nn.Module):
     """
     Variational Autoencoder for spatial compression.
@@ -9,6 +10,7 @@ class ConvVAE(nn.Module):
     Latent: (B, latent_dim)
     Supports both square and rectangular images.
     """
+
     def __init__(self, latent_dim=32, img_size=None, img_height=None, img_width=None):
         super().__init__()
         self.latent_dim = latent_dim
@@ -21,7 +23,9 @@ class ConvVAE(nn.Module):
             self.img_height = img_height
             self.img_width = img_width
         else:
-            raise ValueError("Must provide either img_size or both img_height and img_width")
+            raise ValueError(
+                "Must provide either img_size or both img_height and img_width"
+            )
 
         # Encoder
         self.encoder = nn.Sequential(
@@ -60,7 +64,7 @@ class ConvVAE(nn.Module):
             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(32, 3, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
         # RNN input size (for concatenating current and previous latent)
@@ -100,21 +104,3 @@ class ConvVAE(nn.Module):
         recon_x = self.decode(z)
 
         return recon_x, mu, logvar
-
-class MDNRNN(nn.Module):
-    """
-    Mixture Density Network - RNN for temporal prediction.
-    """
-    def __init__(self, latent_dim=32, hidden_size=256, num_gaussians=5):
-        super().__init__()
-        self.latent_dim = latent_dim
-        self.hidden_size = hidden_size
-        self.num_gaussians = num_gaussians
-        # Define layers here
-
-    def forward(self, z, hidden):
-        """
-        Predicts next latent state distribution.
-        """
-        # Placeholder
-        return None
