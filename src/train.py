@@ -1,6 +1,7 @@
 import argparse
 import json
 from dataclasses import asdict
+from pathlib import Path
 from src.utils.device import get_config, Config
 
 import os
@@ -19,6 +20,7 @@ from src.utils.visualization import (
     plot_training_curves,
     compute_psnr,
 )
+from src.train_mdnrnn import train_mdnrnn
 
 
 def loss_function(recon_x, x, mu, logvar, beta=1.0):
@@ -44,10 +46,10 @@ def train_vae(cfg: Config):
     print(f"Training VAE on {device}")
 
     # Config
-    batch_size = cfg.training.batch_size
-    lr = cfg.training.learning_rate
-    epochs = cfg.training.epochs
-    latent_dim = cfg.model.vae.latent_dim
+    batch_size = cfg.vae.training.batch_size
+    lr = cfg.vae.training.learning_rate
+    epochs = cfg.vae.training.epochs
+    latent_dim = cfg.vae.latent_dim
 
     # Support both square (img_size) and rectangular (img_height, img_width)
 
@@ -57,32 +59,6 @@ def train_vae(cfg: Config):
     # Visualization config
     save_every = cfg.visualization.save_every
     num_samples = cfg.visualization.num_samples
-
-    # Create run name based on config
-    if cfg.run_name == "default_run":  # Check if it's the default fallback or from yaml
-        if img_height == img_width:
-            run_name = (
-                f"vae_z{latent_dim}_img{img_height}_ep{epochs}_lr{lr}_bs{batch_size}"
-            )
-        else:
-            run_name = f"vae_z{latent_dim}_img{img_height}x{img_width}_ep{epochs}"
-    else:
-        run_name = cfg.run_name
-
-    print(f"Run name: {run_name}")
-
-    # Output directories based on run name
-    checkpoint_dir = f"outputs/{run_name}/checkpoints"
-    recon_dir = f"outputs/{run_name}/reconstructions"
-    samples_dir = f"outputs/{run_name}/samples"
-
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    os.makedirs(recon_dir, exist_ok=True)
-    os.makedirs(samples_dir, exist_ok=True)
-
-    # Save config to run directory
-    with open(f"outputs/{run_name}/config.json", "w") as f:
-        json.dump(asdict(cfg), f, indent=2)
 
     # Data
     transform = transforms.Compose(
@@ -95,6 +71,38 @@ def train_vae(cfg: Config):
         dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
 
+    # number of sequences in the dataset
+    num_seq = len(dataset.sequences)
+
+    # Create run name based on config
+    if cfg.run_name == "default_run":  # Check if it's the default fallback or from yaml
+        if img_height == img_width:
+            run_name = f"vae_z{latent_dim}_img{img_height}_ep{epochs}_lr{lr}_bs{batch_size}_seq{num_seq}"
+        else:
+            run_name = (
+                f"vae_z{latent_dim}_img{img_height}x{img_width}_ep{epochs}_seq{num_seq}"
+            )
+    else:
+        run_name = cfg.run_name
+
+    print(f"Run name: {run_name}")
+
+    # Output directories based on run name
+    base_output_dir = Path("outputs")
+    from src.utils.common import setup_run_directory
+
+    run_dir = setup_run_directory(base_output_dir, run_name, cfg)
+
+    checkpoint_dir = run_dir / "checkpoints"
+    recon_dir = run_dir / "reconstructions"
+    samples_dir = run_dir / "samples"
+
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    recon_dir.mkdir(parents=True, exist_ok=True)
+    samples_dir.mkdir(parents=True, exist_ok=True)
+
+    # Config is already saved by setup_run_directory
+
     print(f"Dataset size: {len(dataset)} images")
     print(f"Image size: {img_height}x{img_width}")
     if len(dataset) == 0:
@@ -102,7 +110,9 @@ def train_vae(cfg: Config):
         return
 
     # Model
-    model = ConvVAE(latent_dim=latent_dim, img_height=img_height, img_width=img_width).to(device)
+    model = ConvVAE(
+        latent_dim=latent_dim, img_height=img_height, img_width=img_width
+    ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -229,10 +239,7 @@ def train_vae(cfg: Config):
 
 def train_rnn(cfg: Config):
     """Training loop for RNN (requires trained VAE)."""
-    device = torch.device(cfg.device)
-    print(f"Training RNN on {device}")
-    # Implementation goes here
-    pass
+    train_mdnrnn(cfg)
 
 
 if __name__ == "__main__":

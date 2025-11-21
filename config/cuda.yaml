@@ -1,15 +1,20 @@
 run_name: "cuda_z128_full"  # Custom run name for output folder
-training:
-  batch_size: 128       # Good balance for ~6600 images
-  learning_rate: 0.0001
-  epochs: 100           # Full training
+vae:
+  latent_dim: 128
+  sequence_length: 1     # Moved from data
+  training:
+    batch_size: 32
+    learning_rate: 1e-3
+    epochs: 100
 
-model:
-  vae:
-    latent_dim: 128     # Balanced capacity
-  rnn:
-    hidden_size: 512
-    num_layers: 2
+rnn:
+  hidden_size: 256
+  num_layers: 2
+  sequence_length: 5     # Moved from data
+  training:
+    batch_size: 128
+    learning_rate: 1e-3
+    epochs: 100
 
 data:
   img_height: 192

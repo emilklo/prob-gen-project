@@ -12,6 +12,7 @@ class KITTIOdometryDataset(Dataset):
         root_dir: str,
         pose_dir: str = "data/kitti/poses",
         train_sequences: list | None = None,
+        test_sequences: list | None = None,
         seq_len: int = 10,
         transform=None,
     ):
@@ -20,13 +21,13 @@ class KITTIOdometryDataset(Dataset):
             root_dir: Path to sequences folder (e.g., 'dataset/sequences')
             pose_dir: Path to poses folder (e.g., 'dataset/poses')
             train_sequences: List of strings ['00', '01', '02'...]
+            test_sequences: List of strings to EXCLUDE from training (e.g. ['09', '10'])
             seq_len: Length of RNN sequence window.
         """
         self.root_dir = root_dir
         self.pose_dir = pose_dir
         self.seq_len = seq_len
         self.transform = transform
-
         # Default to KITTI training set if none provided
         if train_sequences is None:
             self.train_sequences = [
@@ -40,10 +41,22 @@ class KITTIOdometryDataset(Dataset):
                 "07",
                 "08",
                 "09",
-                "10",
+                # "10", test set!
             ]
         else:
             self.train_sequences = train_sequences
+
+        # Filter out test sequences
+        if test_sequences:
+            original_count = len(self.train_sequences)
+            self.train_sequences = [
+                s for s in self.train_sequences if s not in test_sequences
+            ]
+            removed_count = original_count - len(self.train_sequences)
+            if removed_count > 0:
+                print(
+                    f"    [Dataset] Excluded {removed_count} test sequences: {test_sequences}"
+                )
 
         # Master lists to store data references
         self.sequence_images = {}  # Map: '00' -> [path1, path2...]
@@ -63,9 +76,13 @@ class KITTIOdometryDataset(Dataset):
         and adds valid sliding-window indices to the master list.
         """
         # 1. Find Images
-        img_dir = os.path.join(self.root_dir, seq_id, "image_02/data")
-        # Glob is fine here because we are inside ONE sequence
-        img_paths = sorted(glob.glob(os.path.join(img_dir, "*.png")))
+        img_dir_with_data = os.path.join(self.root_dir, seq_id, "image_02", "data")
+        img_paths = sorted(glob.glob(os.path.join(img_dir_with_data, "*.png")))
+
+        if not img_paths:
+            # Fallback to the non-'data' directory structure
+            img_dir_without_data = os.path.join(self.root_dir, seq_id, "image_02")
+            img_paths = sorted(glob.glob(os.path.join(img_dir_without_data, "*.png")))
 
         if not img_paths:
             print(f"Warning: No images found for sequence {seq_id}")
@@ -74,15 +91,18 @@ class KITTIOdometryDataset(Dataset):
         # 2. Load Poses & Calculate Deltas
         pose_file = os.path.join(self.pose_dir, f"{seq_id}.txt")
         if not os.path.exists(pose_file):
-            print("file name", pose_file)
-            print(f"Warning: No pose file found for {seq_id}")
+            print(f"Warning: No pose file found for {seq_id} at {pose_file}")
             return
 
         deltas = self._precompute_deltas(pose_file)
 
-        # Sanity Check: Images vs Poses
-        # Note: Poses file usually has N entries for N images.
-        # If mismatch, trim to the shorter length
+        # Sanity Check: We have N-1 deltas for N images.
+        # The delta[i] corresponds to the transform from frame i to i+1.
+        # So, we should associate delta[i] with image[i+1].
+        # We trim the first image to align them.
+        if len(img_paths) > len(deltas):
+            img_paths = img_paths[1 : len(deltas) + 1]
+
         min_len = min(len(img_paths), len(deltas))
         img_paths = img_paths[:min_len]
         deltas = deltas[:min_len]
@@ -93,7 +113,7 @@ class KITTIOdometryDataset(Dataset):
 
         # 4. Create Valid Sliding Windows
         # If seq has 100 frames and seq_len is 10, we can start at 0...90
-        num_valid_starts = min_len - self.seq_len
+        num_valid_starts = min_len - self.seq_len + 1
 
         for i in range(num_valid_starts):
             self.valid_samples.append((seq_id, i))
@@ -125,8 +145,8 @@ class KITTIOdometryDataset(Dataset):
             )
             deltas.append(np.array([dx, dy, dz, roll, pitch, yaw], dtype=np.float32))
 
-        # Pad first frame (zero movement)
-        deltas.insert(0, np.zeros(6, dtype=np.float32))
+        # # Pad first frame (zero movement)
+        # deltas.insert(0, np.zeros(6, dtype=np.float32)) # we trimmed the first image, so no need to pad
         return np.array(deltas)
 
     def _rotation_matrix_to_euler_angles(self, R):
@@ -144,6 +164,9 @@ class KITTIOdometryDataset(Dataset):
 
     def __len__(self):
         return len(self.valid_samples)
+
+    def num_sequences(self):
+        return len(self.sequence_images)
 
     def __getitem__(self, idx):
         # 1. Get Metadata for this specific window
@@ -193,8 +216,9 @@ if __name__ == "__main__":
         dataset = KITTIOdometryDataset(
             root_dir=cfg.data.path,
             train_sequences=None,  # Default to all
-            seq_len=cfg.data.rnn_sequence_length,
+            seq_len=cfg.rnn.sequence_length,
             transform=tf,
+            pose_dir=cfg.data.pose_path,
         )
     except KeyError as e:
         print(f"Error: Missing key in YAML file: {e}")
@@ -210,7 +234,7 @@ if __name__ == "__main__":
         images, poses = next(iter(loader))
 
         print(f"    Batch Size:      {batch_size}")
-        print(f"    Sequence Length: {cfg.data.rnn_sequence_length}")
+        print(f"    Sequence Length: {cfg.rnn.sequence_length}")
         print("-" * 30)
         print(f"    Image Tensor Shape: {images.shape}")
         # Expected: (Batch, Seq_Len, Channels, Height, Width)

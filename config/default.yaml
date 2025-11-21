@@ -1,28 +1,30 @@
-run_name: "default"  # Custom run name for output folder
+run_name: "default_run"
 
-training:
-  batch_size: 32          
-  learning_rate: 1e-3
-  epochs: 100            
+vae:
+  latent_dim: 64
+  sequence_length: 1     # Moved from data
+  training:
+    batch_size: 32
+    learning_rate: 1e-3
+    epochs: 100
 
-model:
-  vae:
-    latent_dim: 64        
-  rnn:
-    hidden_size: 256
-    num_layers: 1
+rnn:
+  hidden_size: 256
+  num_layers: 1
+  sequence_length: 5     # Moved from data
+  training:
+    batch_size: 32
+    learning_rate: 1e-3
+    epochs: 100
 
 data:
-  path: "data/kitti"      # Expected structure: data/kitti/<seq>/image_02/data/*.png
-  pose_path: "data/kitti/poses"  # Path to ground truth poses
-  # For square images, use img_size:
+  path: "data/kitti"
+  pose_path: "data/kitti/poses"
+  test_sequences: ["09", "10"]
   # img_size: 128
-  # For rectangular images, use img_height and img_width:
   img_height: 128
-  img_width: 416          # KITTI aspect ratio ~3.25:1
-  vea_sequence_length: 1
-  rnn_sequence_length: 5      # 5 for RNN training
+  img_width: 416
 
 visualization:
-  save_every: 10          # Save reconstruction samples every N epochs
-  num_samples: 8          # Number of samples to visualize
+  save_every: 10
+  num_samples: 8

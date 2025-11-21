@@ -1,17 +1,25 @@
-run_name: "default_mps"  # Custom run name for output folder
-training:
-  batch_size: 32        # Low to save RAM
-  learning_rate: 0.001
-  epochs: 10             # Just to check if loss goes down
+run_name: "default_run"  # Custom run name for output folder
 
-model:
-  vae:
-    latent_dim: 64      # Smaller vector for easier convergence
-  rnn:
-    hidden_size: 256
-    num_layers: 1
+vae:
+  latent_dim: 128
+  sequence_length: 1     # Moved from data
+  training:
+    batch_size: 32
+    learning_rate: 1e-3
+    epochs: 100
+
+rnn:
+  hidden_size: 256
+  num_layers: 1
+  sequence_length: 5     # Moved from data
+  training:
+    batch_size: 32
+    learning_rate: 1e-3
+    epochs: 100
+  
     
 data:
   # Maintains 3.25:1 ratio, very fast to process
   img_height: 128       
   img_width: 416
+  rnn_sequence_length: 5      # 5 for RNN training

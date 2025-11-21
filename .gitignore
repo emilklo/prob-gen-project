@@ -20,3 +20,5 @@ logs/
 outputs/
 
 old_code/
+
+data/kitti/

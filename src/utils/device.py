@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+import json
+from typing import Any, Dict, List, Optional
 import yaml
 from pathlib import Path
 import torch
@@ -29,28 +30,26 @@ class TrainingConfig:
 @dataclass
 class VaeConfig:
     latent_dim: int
+    sequence_length: int
+    training: TrainingConfig
 
 
 @dataclass
 class RnnConfig:
     hidden_size: int
     num_layers: int
-
-
-@dataclass
-class ModelConfig:
-    vae: VaeConfig
-    rnn: RnnConfig
+    sequence_length: int
+    training: TrainingConfig
 
 
 @dataclass
 class DataConfig:
     path: str
     pose_path: str
+    test_sequences: List[str]
     img_height: int
     img_width: int
-    vea_sequence_length: int
-    rnn_sequence_length: int
+    # Sequence lengths moved to Model Configs
 
 
 @dataclass
@@ -62,11 +61,108 @@ class VisualizationConfig:
 @dataclass
 class Config:
     run_name: str
-    training: TrainingConfig
-    model: ModelConfig
+    vae: VaeConfig
+    rnn: RnnConfig
     data: DataConfig
     visualization: VisualizationConfig
     device: str = field(default_factory=lambda: str(get_compute_device()))
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Config":
+        """
+        Factory method to create a Config object.
+        Handles backward compatibility for old config structures.
+        """
+        # ---------------------------------------------------------
+        # MIGRATION LOGIC: Handle Old Config Structure
+        # ---------------------------------------------------------
+        if "model" in data:
+            print("Detected legacy configuration format. Migrating to new structure...")
+
+            # 1. Extract global training config (used for both VAE and RNN in old format)
+            global_training = data.get("training", {})
+
+            # 2. Extract Model Params
+            old_model_vae = data["model"].get("vae", {})
+            old_model_rnn = data["model"].get("rnn", {})
+
+            # 3. Extract Data Params and Sequence Lengths
+            data_cfg = data.get("data", {})
+            # Handle the specific typo 'vea' from old config if present
+            vae_seq_len = data_cfg.pop(
+                "vea_sequence_length", data_cfg.pop("vae_sequence_length", 1)
+            )
+            rnn_seq_len = data_cfg.pop("rnn_sequence_length", 5)
+
+            # 4. Construct VAE Config (New Format)
+            vae_config = VaeConfig(
+                latent_dim=old_model_vae.get("latent_dim", 64),
+                sequence_length=vae_seq_len,
+                training=TrainingConfig(**global_training),
+            )
+
+            # 5. Construct RNN Config (New Format)
+            rnn_config = RnnConfig(
+                hidden_size=old_model_rnn.get("hidden_size", 256),
+                num_layers=old_model_rnn.get("num_layers", 1),
+                sequence_length=rnn_seq_len,
+                training=TrainingConfig(**global_training),
+            )
+
+            # 6. Construct Data Config
+            # Ensure test_sequences exists for robustness
+            if "test_sequences" not in data_cfg:
+                data_cfg["test_sequences"] = ["00"]
+
+            data_obj = DataConfig(**data_cfg)
+
+            return cls(
+                run_name=data.get("run_name", "legacy_run"),
+                vae=vae_config,
+                rnn=rnn_config,
+                data=data_obj,
+                visualization=VisualizationConfig(**data.get("visualization", {})),
+            )
+
+        # ---------------------------------------------------------
+        # STANDARD LOGIC: Handle New Config Structure
+        # ---------------------------------------------------------
+        return cls(
+            run_name=data.get("run_name", "default_run"),
+            vae=VaeConfig(
+                latent_dim=data["vae"]["latent_dim"],
+                sequence_length=data["vae"]["sequence_length"],
+                training=TrainingConfig(**data["vae"]["training"]),
+            ),
+            rnn=RnnConfig(
+                hidden_size=data["rnn"]["hidden_size"],
+                num_layers=data["rnn"]["num_layers"],
+                sequence_length=data["rnn"]["sequence_length"],
+                training=TrainingConfig(**data["rnn"]["training"]),
+            ),
+            data=DataConfig(**data["data"]),
+            visualization=VisualizationConfig(**data["visualization"]),
+        )
+
+    @classmethod
+    def from_file(cls, file_path: str | Path) -> "Config":
+        """
+        Loads configuration from a YAML or JSON file.
+        """
+        path = Path(file_path)
+
+        if not path.exists():
+            raise FileNotFoundError(f"Config file not found: {path}")
+
+        with open(path, "r") as f:
+            if path.suffix == ".json":
+                data = json.load(f)
+            elif path.suffix in [".yaml", ".yml"]:
+                data = yaml.safe_load(f)
+            else:
+                raise ValueError(f"Unsupported config file format: {path.suffix}")
+
+        return cls.from_dict(data)
 
 
 def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -86,11 +182,13 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 def load_config_dict(config_dir: str = "config") -> Dict[str, Any]:
     """
     Loads the default configuration and overrides it with device-specific settings.
+    Returns a raw dictionary.
     """
     project_root = Path(__file__).resolve().parent.parent.parent
     config_path = project_root / config_dir
     default_config_path = config_path / "default.yaml"
 
+    # Fallback logic if running from different relative paths
     if not default_config_path.exists():
         config_path = Path(config_dir).resolve()
         default_config_path = config_path / "default.yaml"
@@ -101,6 +199,7 @@ def load_config_dict(config_dir: str = "config") -> Dict[str, Any]:
     with open(default_config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    # Device-specific overrides (e.g., config/cuda.yaml or config/mps.yaml)
     device = get_compute_device().type
     device_config_path = config_path / f"{device}.yaml"
 
@@ -109,8 +208,6 @@ def load_config_dict(config_dir: str = "config") -> Dict[str, Any]:
         with open(device_config_path, "r") as f:
             device_config = yaml.safe_load(f)
         config = deep_merge(config, device_config)
-    else:
-        print(f"No device-specific config found for {device}. Using default.")
 
     return config
 
@@ -120,13 +217,4 @@ def get_config() -> Config:
     Loads the configuration and returns a typed Config object.
     """
     data = load_config_dict()
-
-    return Config(
-        run_name=data.get("run_name", "default_run"),
-        training=TrainingConfig(**data["training"]),
-        model=ModelConfig(
-            vae=VaeConfig(**data["model"]["vae"]), rnn=RnnConfig(**data["model"]["rnn"])
-        ),
-        data=DataConfig(**data["data"]),
-        visualization=VisualizationConfig(**data["visualization"]),
-    )
+    return Config.from_dict(data)

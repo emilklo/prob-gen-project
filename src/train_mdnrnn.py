@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -14,24 +14,12 @@ from src.utils.device import Config, get_config
 logger = get_logger(__name__)
 
 
-def training(cfg: Config):
+def train_mdnrnn(cfg: Config):
     # --- 1. Setup Configuration & Directories ---
     device = torch.device(cfg.device)
 
-    # Create output directories
-    run_name = cfg.run_name
-    output_dir = f"outputs/{run_name}/rnn_checkpoints"
-    os.makedirs(output_dir, exist_ok=True)
-
-    print(f"[-] Training RNN on {device} | Run: {run_name}")
-    print(
-        f"    Batch: {cfg.training.batch_size} | SeqLen: {cfg.data.rnn_sequence_length}"
-    )
-    print(
-        f"    Layers: {cfg.model.rnn.num_layers} | Hidden: {cfg.model.rnn.hidden_size}"
-    )
-
     # --- 2. Data & Transforms ---
+    # Initialize dataset EARLY to use its properties for run naming
     transform = transforms.Compose(
         [
             transforms.Resize((cfg.data.img_height, cfg.data.img_width)),
@@ -41,30 +29,66 @@ def training(cfg: Config):
 
     dataset = KITTIOdometryDataset(
         root_dir=cfg.data.path,
-        seq_len=cfg.data.rnn_sequence_length,
+        seq_len=cfg.rnn.sequence_length,
         transform=transform,
+        pose_dir=cfg.data.pose_path,
+        test_sequences=cfg.data.test_sequences,
     )
 
     dataloader = DataLoader(
         dataset,
-        batch_size=cfg.training.batch_size,
+        batch_size=cfg.rnn.training.batch_size,
         shuffle=True,
         drop_last=True,
         num_workers=4,
         pin_memory=True,
     )
 
+    # --- 3. Run Naming & Directory Setup ---
+    base_output_dir = Path("outputs")
+
+    # Create run name based on config
+    if cfg.run_name == "default_run":
+        run_name = (
+            f"mdnrnn_rnn{cfg.rnn.num_layers}l_"
+            f"h{cfg.rnn.hidden_size}_"
+            f"bs{cfg.rnn.training.batch_size}_"
+            f"seq{cfg.rnn.sequence_length}_"
+            f"numseq{dataset.num_sequences()}"
+        )
+    else:
+        run_name = cfg.run_name
+
+    from src.utils.common import setup_run_directory
+
+    run_dir = setup_run_directory(base_output_dir, run_name, cfg)
+
+    output_dir = run_dir / "rnn_checkpoints"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Directory for trajectory plots
+    traj_dir = run_dir / "trajectories"
+    traj_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"[-] Training RNN on {device} | Run: {cfg.run_name}")
+    print(
+        f"    Batch: {cfg.rnn.training.batch_size} | SeqLen: {cfg.rnn.sequence_length}"
+    )
+    print(f"    Layers: {cfg.rnn.num_layers} | Hidden: {cfg.rnn.hidden_size}")
+    if cfg.data.test_sequences:
+        print(f"    Test Sequences: {cfg.data.test_sequences}")
+
     # --- 3. Load Pre-trained VAE (Frozen) ---
     vae = ConvVAE(
-        latent_dim=cfg.model.vae.latent_dim,
+        latent_dim=cfg.vae.latent_dim,
         img_height=cfg.data.img_height,
         img_width=cfg.data.img_width,
     ).to(device)
 
     # TODO: Add 'vae_checkpoint' to your config file to avoid hardcoding
-    vae_path = "outputs/vae_z64_img128_mps/checkpoints/vae_final.pth"
+    vae_path = Path("outputs/vae_z64_img128_mps2/checkpoints/vae_epoch_20.pth")
 
-    if os.path.exists(vae_path):
+    if vae_path.exists():
         print(f"[-] Loading VAE weights from {vae_path}")
         checkpoint = torch.load(vae_path, map_location=device)
         vae.load_state_dict(checkpoint["model_state_dict"])
@@ -77,20 +101,20 @@ def training(cfg: Config):
 
     # --- 4. Initialize RNN ---
     rnn = DreamerMDRNN(
-        latent_dim=cfg.model.vae.latent_dim,
-        hidden_size=cfg.model.rnn.hidden_size,
-        num_layers=cfg.model.rnn.num_layers,  # <--- From Config
+        latent_dim=cfg.vae.latent_dim,
+        hidden_size=cfg.rnn.hidden_size,
+        num_layers=cfg.rnn.num_layers,  # <--- From Config
     ).to(device)
 
-    optimizer = optim.Adam(rnn.parameters(), lr=float(cfg.training.learning_rate))
+    optimizer = optim.Adam(rnn.parameters(), lr=float(cfg.rnn.training.learning_rate))
 
     # --- 5. Training Loop ---
     best_loss = float("inf")
     start_epoch = 0
-    best_model_path = os.path.join(output_dir, "rnn_best.pth")
+    best_model_path = output_dir / "rnn_best.pth"
     LOAD_BEST = True
     if LOAD_BEST:
-        if os.path.exists(best_model_path):
+        if best_model_path.exists():
             print(
                 f"[-] LOAD_BEST=True: Loading existing checkpoint from {best_model_path}"
             )
@@ -114,7 +138,9 @@ def training(cfg: Config):
                 f"[!] LOAD_BEST=True, but {best_model_path} does not exist. Starting from scratch."
             )
 
-    for epoch in range(start_epoch, cfg.training.epochs):
+    from src.utils.trajectory import evaluate_and_plot_test_sequences
+
+    for epoch in range(start_epoch, cfg.rnn.training.epochs):
         rnn.train()
         epoch_loss = 0
         epoch_pose_loss = 0
@@ -130,8 +156,11 @@ def training(cfg: Config):
                 z_sequence = z_flat.view(b, s, -1)
 
             # B. Prepare Inputs/Targets
+            # (Batch, Seq_Len-1, Latent_Dim)
             rnn_input = z_sequence[:, :-1, :]
             z_target = z_sequence[:, 1:, :]
+
+            # (Batch, Seq_Len-1, 6)
             pose_target_slice = pose_targets[:, 1:, :]
 
             # C. Forward
@@ -169,7 +198,7 @@ def training(cfg: Config):
         # 1. Save Best Model
         if avg_loss < best_loss:
             best_loss = avg_loss
-            save_path = os.path.join(output_dir, "rnn_best.pth")
+            save_path = output_dir / "rnn_best.pth"
             torch.save(
                 {
                     "epoch": epoch + 1,
@@ -180,11 +209,11 @@ def training(cfg: Config):
                 },
                 save_path,
             )
-            print(f"    [*] New Best Model Saved!")
+            print("    [*] New Best Model Saved!")
 
         # 2. Save Periodic/Final Model
-        if (epoch + 1) % 5 == 0 or (epoch + 1) == cfg.training.epochs:
-            save_path = os.path.join(output_dir, f"rnn_epoch_{epoch+1}.pth")
+        if (epoch + 1) % 5 == 0 or (epoch + 1) == cfg.rnn.training.epochs:
+            save_path = output_dir / f"rnn_epoch_{epoch+1}.pth"
             torch.save(
                 {
                     "epoch": epoch + 1,
@@ -195,7 +224,19 @@ def training(cfg: Config):
                 save_path,
             )
 
+            # 3. Evaluate on Test Sequences
+            if cfg.data.test_sequences:
+                evaluate_and_plot_test_sequences(
+                    model=rnn,
+                    vae=vae,
+                    test_sequences=cfg.data.test_sequences,
+                    cfg=cfg,
+                    save_dir=traj_dir,
+                    epoch=epoch + 1,
+                    device=device,
+                )
+
 
 if __name__ == "__main__":
     cfg = get_config()
-    training(cfg)
+    train_mdnrnn(cfg)
