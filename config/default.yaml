@@ -1,9 +1,9 @@
-run_name: "deault"  # Custom run name for output folder
+run_name: "default"  # Custom run name for output folder
 
 training:
   batch_size: 32          
   learning_rate: 1e-3
-  epochs: 100             
+  epochs: 100            
 
 model:
   vae:

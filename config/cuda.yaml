@@ -1,18 +1,16 @@
-run_name: "cuda_large"  # Custom run name for output folder
+run_name: "cuda_z128_full"  # Custom run name for output folder
 training:
-  batch_size: 512       # A100 has huge VRAM, feed it!
-  learning_rate: 0.0005 # Lower LR for stability with large batches
-  epochs: 100           # Let it converge fully
+  batch_size: 128       # Good balance for ~6600 images
+  learning_rate: 0.0001
+  epochs: 100           # Full training
 
 model:
   vae:
-    latent_dim: 256     # High capacity to store "Lane markings", "Traffic Signs"
+    latent_dim: 128     # Balanced capacity
   rnn:
-    hidden_size: 512    # Increased capacity for complex dynamics
-    num_layers: 2       # Stacked LSTM for better context
+    hidden_size: 512
+    num_layers: 2
 
 data:
-  # High resolution. Divisible by 16. 
-  # Captures distant objects which reduces drift.
-  img_height: 192       
+  img_height: 192
   img_width: 640
