@@ -1,4 +1,4 @@
-run_name: "cuda_z128_full"  # Custom run name for output folder
+run_name: "model_emil_z128"  # Custom run name for output folder
 training:
   batch_size: 128       # Good balance for ~6600 images
   learning_rate: 0.0001

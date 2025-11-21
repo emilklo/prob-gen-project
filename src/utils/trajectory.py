@@ -69,6 +69,7 @@ def run_evaluation():
     img_height, img_width = cfg.data.img_height, cfg.data.img_width
 
     # 1. Load Data (Validation Sequence, e.g., 00 or 07)
+    # No normalization to match training (VAE expects [0,1] inputs)
     transform = transforms.Compose(
         [
             transforms.Resize((img_height, img_width)),
@@ -76,26 +77,30 @@ def run_evaluation():
         ]
     )
 
-    # Note: We set seq_len=1 because we will manually loop through the frames
-    # to simulate a continuous drive.
+    # Note: We use seq_len=5 to match training configuration
     dataset = KITTIOdometryDataset(
         root_dir=cfg.data.path,
-        train_sequences=["00"],  # Evaluate on Sequence 00
-        seq_len=2,  # Minimal context needed to grab pairs
+        train_sequences=["03"],  # Evaluate on Sequence 03
+        seq_len=5,  # Match training sequence length
         transform=transform,
     )
 
     # 2. Load Models
     print("[-] Loading models...")
-    vae = ConvVAE(latent_dim=128, img_height=img_height, img_width=img_width).to(device)
-    rnn = DreamerMDRNN(latent_dim=128, hidden_size=512).to(device)
+    latent_dim = cfg.model.vae.latent_dim
+    hidden_size = cfg.model.rnn.hidden_size
+    num_layers = cfg.model.rnn.num_layers
+
+    vae = ConvVAE(latent_dim=latent_dim, img_height=img_height, img_width=img_width).to(device)
+    rnn = DreamerMDRNN(latent_dim=latent_dim, hidden_size=hidden_size, num_layers=num_layers).to(device)
 
     # --- PATHS (UPDATE THESE) ---
-    vae_path = "outputs/vae_z64_img128_mps/checkpoints/vae_final.pth"
-    rnn_path = "outputs/rnn_checkpoints/rnn_final.pth"
+    run_name = cfg.run_name
+    vae_path = f"outputs/{run_name}/checkpoints/vae_final.pth"
+    rnn_path = f"outputs/{run_name}/rnn_checkpoints/rnn_best.pth"
 
-    vae.load_state_dict(torch.load(vae_path, map_location=device)["model_state_dict"])
-    rnn.load_state_dict(torch.load(rnn_path, map_location=device)["model_state_dict"])
+    vae.load_state_dict(torch.load(vae_path, map_location=device, weights_only=False)["model_state_dict"])
+    rnn.load_state_dict(torch.load(rnn_path, map_location=device, weights_only=False)["model_state_dict"])
 
     vae.eval()
     rnn.eval()
@@ -110,30 +115,33 @@ def run_evaluation():
     # If not, we iterate the standard way.
     # Let's iterate 500 frames (50 seconds of driving)
 
-    limit = 500
+    limit = min(500, len(dataset))
     hidden = None  # LSTM hidden state
 
     with torch.no_grad():
-        # To simulate streaming, we feed frames one by one
-        # We grab window [t, t+1] from dataset
+        # Process sequences to match training configuration
         for i in range(limit):
-            imgs, poses = dataset[i]  # Returns seq_len=2
+            imgs, poses = dataset[i]  # Returns seq_len=5
 
-            # imgs: (2, 3, H, W)
-            # poses: (2, 6) -> We want movement from 0->1
+            # imgs: (5, 3, H, W)
+            # poses: (5, 6)
 
-            img_t0 = imgs[0].unsqueeze(0).to(device)  # (1, 3, H, W)
+            # Encode all frames in the sequence
+            imgs_batch = imgs.unsqueeze(0).to(device)  # (1, 5, 3, H, W)
+            b, s, c, h, w = imgs_batch.size()
+            z_flat = vae.encode(imgs_batch.view(b * s, c, h, w))
+            z_sequence = z_flat.view(b, s, -1)  # (1, 5, latent_dim)
 
-            # Encode
-            z = vae.encode(img_t0).unsqueeze(1)  # (1, 1, 128)
+            # RNN expects input sequence (we use all but last to predict transitions)
+            rnn_input = z_sequence[:, :-1, :]  # (1, 4, latent_dim)
 
-            # RNN Step
-            # We feed z_t. The RNN predicts the transition and next state
-            pi, mu, sigma, pred_pose, hidden = rnn(z, hidden)
+            # RNN Step - feed full sequence context
+            _, _, _, pred_pose, hidden = rnn(rnn_input, hidden)
 
-            # Pred_pose shape: (1, 1, 6)
-            pred_d = pred_pose[0, 0].cpu().numpy()
-            true_d = poses[1].cpu().numpy()  # Target is the delta at index 1
+            # pred_pose shape: (1, 4, 6) - predictions for transitions 0->1, 1->2, 2->3, 3->4
+            # Use the last prediction which has most context
+            pred_d = pred_pose[0, -1].cpu().numpy()
+            true_d = poses[-1].cpu().numpy()  # Target is the last delta
 
             pred_deltas.append(pred_d)
             true_deltas.append(true_d)
@@ -160,7 +168,7 @@ def run_evaluation():
     plt.legend()
     plt.grid(True, alpha=0.3)
 
-    out_file = "trajectory_result.png"
+    out_file = "trajectory_result_new.png"
     plt.savefig(out_file)
     print(f"[-] Saved plot to {out_file}")
 

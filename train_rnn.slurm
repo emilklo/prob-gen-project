@@ -1,16 +1,16 @@
 #!/bin/bash
-#SBATCH --job-name=vae-train
+#SBATCH --job-name=mdnrnn-train
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="a100"
-#SBATCH --time=06:00:00
+#SBATCH --time=04:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
-#SBATCH --output=logs/vae_%j.out
-#SBATCH --error=logs/vae_%j.err
+#SBATCH --output=logs/rnn_%j.out
+#SBATCH --error=logs/rnn_%j.err
 
 echo "=============================================="
-echo "  VAE Training (with Normalization)"
+echo "  MDN-RNN Training"
 echo "=============================================="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $SLURM_NODELIST"
@@ -27,12 +27,10 @@ nvidia-smi
 uv run python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"}')"
 echo ""
 
-# Run VAE training
-# Config is auto-detected (cuda.yaml for CUDA devices)
-echo "Training VAE with augmentation and normalization..."
-echo "Features: validation split, early stopping, LR scheduler"
-uv run python -m src.train --mode vae
+# Run MDN-RNN training
+echo "Training MDN-RNN using VAE checkpoint from config run_name..."
+uv run python -m src.train_mdnrnn
 
 echo ""
-echo "VAE training complete!"
+echo "RNN training complete!"
 echo "End time: $(date)"

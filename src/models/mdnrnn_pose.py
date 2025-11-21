@@ -14,6 +14,7 @@ class DreamerMDRNN(nn.Module):
         hidden_size: int = 256,
         num_layers: int = 2,
         num_gaussians: int = 5,
+        dropout: float = 0.1,
     ):
         """
         MDRNN with a Dual Head:
@@ -33,6 +34,7 @@ class DreamerMDRNN(nn.Module):
             hidden_size,
             num_layers=num_layers,
             batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,  # Dropout only between layers
         )
 
         # --- 2. The Vision Heads (MDN) ---

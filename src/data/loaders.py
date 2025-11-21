@@ -16,13 +16,15 @@ class KITTIDataset(Dataset):
     """
 
     def __init__(
-        self, root_dir: str, sequence_length: int = 1, transform=None
-    ):  # idun 5 sequences
+        self, root_dir: str, sequence_length: int = 1, transform=None, sequences: list = None
+    ):
         """
         Args:
             root_dir (str): Path to the dataset (e.g., data/kitti).
             sequence_length (int): Number of frames per sequence.
             transform (callable, optional): Transform to apply to images.
+            sequences (list, optional): List of sequence IDs to include (e.g., ["00", "01"]).
+                                        If None, uses all available sequences.
         """
         self.root_dir = root_dir
         self.sequence_length = sequence_length
@@ -30,9 +32,17 @@ class KITTIDataset(Dataset):
 
         # Find all image files
         # Assuming structure: root/00/image_02/data/*.png
-        self.image_files = sorted(
-            glob.glob(os.path.join(root_dir, "*", "image_02", "data", "*.png"))
-        )
+        if sequences is None:
+            self.image_files = sorted(
+                glob.glob(os.path.join(root_dir, "*", "image_02", "data", "*.png"))
+            )
+        else:
+            self.image_files = []
+            for seq_id in sequences:
+                seq_files = sorted(
+                    glob.glob(os.path.join(root_dir, seq_id, "image_02", "data", "*.png"))
+                )
+                self.image_files.extend(seq_files)
 
         if not self.image_files:
             logger.warning(
