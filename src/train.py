@@ -1,10 +1,7 @@
 import argparse
-import json
 from dataclasses import asdict
 from pathlib import Path
 from src.utils.device import get_config, Config
-
-import os
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -20,6 +17,7 @@ from src.utils.visualization import (
     plot_training_curves,
     compute_psnr,
 )
+from src.utils.common import setup_run_directory
 from src.train_mdnrnn import train_mdnrnn
 
 
@@ -89,7 +87,6 @@ def train_vae(cfg: Config):
 
     # Output directories based on run name
     base_output_dir = Path("outputs")
-    from src.utils.common import setup_run_directory
 
     run_dir = setup_run_directory(base_output_dir, run_name, cfg)
 
@@ -200,7 +197,7 @@ def train_vae(cfg: Config):
                 )
                 save_latent_samples(model, 16, samples_dir, epoch + 1, device)
             model.train()
-            print(f"  -> Saved reconstruction and sample visualizations")
+            print("  -> Saved reconstruction and sample visualizations")
 
         # Save checkpoint
         if (epoch + 1) % 10 == 0:
@@ -214,7 +211,7 @@ def train_vae(cfg: Config):
                 },
                 f"{checkpoint_dir}/vae_epoch_{epoch+1}.pth",
             )
-            print(f"  -> Saved checkpoint")
+            print("  -> Saved checkpoint")
 
     # Save final model and training curves
     torch.save(

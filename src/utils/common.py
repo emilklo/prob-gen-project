@@ -1,7 +1,8 @@
 from pathlib import Path
 import json
 from dataclasses import asdict
-from typing import Any
+
+from src.utils.device import Config
 
 
 def get_unique_path(path_str: str | Path) -> Path:
@@ -36,7 +37,7 @@ def get_unique_path(path_str: str | Path) -> Path:
         counter += 1
 
 
-def setup_run_directory(base_output_dir: Path, run_name: str, cfg: Any) -> Path:
+def setup_run_directory(base_output_dir: Path, run_name: str, cfg: Config) -> Path:
     """
     Sets up the run directory.
     - If directory exists and config matches: Resumes (returns existing path).

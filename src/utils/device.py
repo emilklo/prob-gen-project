@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import json
-from typing import Any, Dict, List, Optional
+
+from typing import Any
 import yaml
 from pathlib import Path
 import torch
@@ -46,7 +47,7 @@ class RnnConfig:
 class DataConfig:
     path: str
     pose_path: str
-    test_sequences: List[str]
+    test_sequences: list[str]
     img_height: int
     img_width: int
     # Sequence lengths moved to Model Configs
@@ -56,6 +57,18 @@ class DataConfig:
 class VisualizationConfig:
     save_every: int
     num_samples: int
+
+
+# --- LEGACY SUPPORT START -----------------------------------------
+# This class MUST exist for torch.load to unpickle old checkpoints.
+# It is not used in new code, but the unpickler looks for it.
+@dataclass
+class ModelConfig:
+    vae: VaeConfig
+    rnn: RnnConfig
+
+
+# --- LEGACY SUPPORT END -------------------------------------------
 
 
 @dataclass
@@ -68,7 +81,7 @@ class Config:
     device: str = field(default_factory=lambda: str(get_compute_device()))
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Config":
+    def from_dict(cls, data: dict[str, Any]) -> "Config":
         """
         Factory method to create a Config object.
         Handles backward compatibility for old config structures.
@@ -164,8 +177,47 @@ class Config:
 
         return cls.from_dict(data)
 
+    # --- MAGIC METHOD FOR PICKLE MIGRATION ---
+    def __setstate__(self, state):
+        """
+        This magic method is called when torch.load (pickle) reconstructs the object.
+        We use it to migrate old checkpoint data to the new class structure.
+        """
+        if "model" in state:
+            # We detected an OLD config format in the pickle file!
+            # Structure was: {model: ModelConfig(vae, rnn), training: TrainingConfig, ...}
 
-def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+            print("Migrating legacy checkpoint config to new structure...")
+
+            # 1. Extract the old components
+            old_model = state["model"]  # This is the ModelConfig instance
+            old_training = state["training"]  # This is the global TrainingConfig
+
+            # 2. Setup VAE (Inject missing fields)
+            self.vae = old_model.vae
+            self.vae.training = old_training  # Duplicate global training to VAE
+            # Fallback for sequence length if missing (old value was in data)
+            if not hasattr(self.vae, "sequence_length"):
+                self.vae.sequence_length = 1
+
+            # 3. Setup RNN (Inject missing fields)
+            self.rnn = old_model.rnn
+            self.rnn.training = old_training  # Duplicate global training to RNN
+            if not hasattr(self.rnn, "sequence_length"):
+                self.rnn.sequence_length = 5
+
+            # 4. Map remaining fields
+            self.data = state["data"]
+            self.visualization = state["visualization"]
+            self.run_name = state.get("run_name", "legacy_run")
+            self.device = state.get("device", "cpu")
+
+        else:
+            # Standard loading for new checkpoints
+            self.__dict__.update(state)
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """
     Recursively merges two dictionaries.
     Values in 'override' overwrite values in 'base'.
@@ -179,7 +231,7 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
     return merged
 
 
-def load_config_dict(config_dir: str = "config") -> Dict[str, Any]:
+def load_config_dict(config_dir: str = "config") -> dict[str, Any]:
     """
     Loads the default configuration and overrides it with device-specific settings.
     Returns a raw dictionary.
