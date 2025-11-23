@@ -63,15 +63,11 @@ def training(cfg: Config):
     )
 
     # --- Train/Val Split by Sequence ---
-    available_sequences = get_available_sequences(cfg.data.path)
-    if len(available_sequences) < 2:
-        print(f"WARNING: Only {len(available_sequences)} sequences found. Using all for training.")
-        train_sequences = available_sequences
-        val_sequences = available_sequences
-    else:
-        # Use last sequence for validation
-        train_sequences = available_sequences[:-1]
-        val_sequences = [available_sequences[-1]]
+    # Only use sequences with consecutive frames (no gaps in image numbering)
+    # Sequences 01, 02, 03 have gaps which cause image-pose misalignment
+    # Train: 00 (4536 samples) | Val: 10 (1196 samples) | Inference: 04 (unseen)
+    train_sequences = ["00"]
+    val_sequences = ["10"]
 
     print(f"Train sequences: {train_sequences}")
     print(f"Val sequences: {val_sequences}")

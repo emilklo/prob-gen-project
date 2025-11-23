@@ -114,15 +114,11 @@ def train_vae(cfg: Config):
     )
 
     # --- Train/Val Split by Sequence ---
-    available_sequences = get_available_sequences(cfg.data.path)
-    if len(available_sequences) < 2:
-        print(f"WARNING: Only {len(available_sequences)} sequences found. Using all for training.")
-        train_sequences = available_sequences
-        val_sequences = available_sequences
-    else:
-        # Use last sequence for validation
-        train_sequences = available_sequences[:-1]
-        val_sequences = [available_sequences[-1]]
+    # VAE can use all images (gaps don't matter for single-image training)
+    # Train: 00, 01, 02, 03, 10 (all available)
+    # Val: 04 (held out for MDN-RNN inference)
+    train_sequences = ["00", "01", "02", "03", "10"]
+    val_sequences = ["04"]
 
     print(f"Train sequences: {train_sequences}")
     print(f"Val sequences: {val_sequences}")

@@ -78,9 +78,10 @@ def run_evaluation():
     )
 
     # Note: We use seq_len=5 to match training configuration
+    # Sequence 04 is completely unseen by MDN-RNN (train: 00, val: 10)
     dataset = KITTIOdometryDataset(
         root_dir=cfg.data.path,
-        train_sequences=["03"],  # Evaluate on Sequence 03
+        train_sequences=["04"],  # Evaluate on Sequence 04 (completely unseen, no gaps)
         seq_len=5,  # Match training sequence length
         transform=transform,
     )
@@ -161,7 +162,7 @@ def run_evaluation():
     plt.plot(path_true[:, 0], path_true[:, 2], "k-", label="Ground Truth", linewidth=2)
     plt.plot(path_pred[:, 0], path_pred[:, 2], "r--", label="Ours (RNN)", linewidth=2)
 
-    plt.title(f"Visual Odometry Result (Seq 00, {limit} frames)")
+    plt.title(f"Visual Odometry Result (Seq 04, {limit} frames)")
     plt.xlabel("X (meters)")
     plt.ylabel("Z (meters)")
     plt.axis("equal")  # Crucial to see turns correctly
