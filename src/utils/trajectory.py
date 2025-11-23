@@ -13,7 +13,7 @@ import torchvision.transforms as transforms
 # Import your modules
 from src.data.odometry_loader import KITTIOdometryDataset
 from src.models.mdnrnn_pose import DreamerMDRNN
-from src.models.world_model import ConvVAE
+from src.models.conv_vea import ConvVAE
 from src.utils.common import get_unique_path
 
 
@@ -65,6 +65,7 @@ def evaluate_and_plot_test_sequences(
     save_dir: Path,
     epoch: int,
     device: torch.device,
+    limit: int = 1000,
 ):
     """
     Evaluates the model on each test sequence and plots the trajectory.
@@ -108,7 +109,7 @@ def evaluate_and_plot_test_sequences(
 
         # Limit frames for faster plotting during training if needed,
         # but usually we want the full test sequence.
-        limit = len(dataset)
+        limit = min(limit, len(dataset))
 
         with torch.no_grad():
             for i in range(limit):

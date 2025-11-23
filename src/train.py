@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from tqdm import tqdm
 
-from src.models.world_model import ConvVAE
+from models.conv_vea import ConvVAE
 from src.data.loaders import KITTIDataset
 from src.utils.visualization import (
     save_reconstruction_comparison,
