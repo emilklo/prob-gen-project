@@ -169,7 +169,28 @@ We train the model on short, shuffled sequences (Window Size = 5) where the hidd
 *   **Limitation (Training-Inference Mismatch)**: The model is trained to have a "short-term memory" (5 steps) but is evaluated on long sequences (1000+ steps). This can lead to **drift** over time, as the model may not learn to manage long-term memory slots effectively.
 *   **Future Work**: Implement **Truncated Backpropagation Through Time (TBPTT)** with state passing to allow the model to learn global map consistency.
 
-### 4.6 Results: Trajectory Prediction
+### 4.6 Generative vs. Deterministic Modeling
+**The Paradox**: Driving physics is largely deterministic (Newton's laws). Why use a generative probabilistic model (MDN)?
+
+1.  **Aleatoric Uncertainty**: Real-world data is noisy and incomplete. A deterministic model predicts the *average* outcome (often physically impossible), while a generative model predicts a *distribution* of valid outcomes.
+2.  **Multimodality**: At a fork in the road, a deterministic model averages "Left" and "Right" to predict "Straight" (into a wall). An MDN predicts two distinct peaks: $P(Left) = 0.5, P(Right) = 0.5$.
+
+### 4.7 The Concept of "Dreaming"
+The true power of the World Model is **Latent Dreaming** (Closed-Loop Prediction).
+*   **Open Loop (Testing)**: We feed the model ground truth images at every step. It corrects itself constantly.
+*   **Closed Loop (Dreaming)**: We feed the model its *own* previous prediction.
+    1.  $z_0$ (Real) $\rightarrow$ Model $\rightarrow$ Predicts $z_1$.
+    2.  $z_1$ (Imagined) $\rightarrow$ Model $\rightarrow$ Predicts $z_2$.
+    3.  ...
+    4.  $z_{100}$ (Imagined) $\rightarrow$ Model $\rightarrow$ Predicts $z_{101}$.
+
+This allows the agent to simulate infinite futures without seeing new data, enabling planning in a "dream" environment.
+
+**Dreaming Result (Sequence 09)**:
+![Dreaming Seq 09](outputs/presentation_assets/dreaming_seq09.png)
+*Note: The blue line shows the "hallucinated" trajectory where the model feeds its own predictions back into itself. Divergence from ground truth (black) is expected due to the accumulation of errors over time (Drift).*
+
+### 4.8 Results: Trajectory Prediction
 By recursively feeding the predicted $z_{t+1}$ back into the RNN ("dreaming") and integrating the predicted pose deltas, we can reconstruct the vehicle's trajectory.
 
 **Test Sequence 09 (Ground Truth vs. Prediction)**:

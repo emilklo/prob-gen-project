@@ -98,10 +98,10 @@ class KITTIOdometryDataset(Dataset):
 
         # Sanity Check: We have N-1 deltas for N images.
         # The delta[i] corresponds to the transform from frame i to i+1.
-        # So, we should associate delta[i] with image[i+1].
-        # We trim the first image to align them.
+        # So, we should associate delta[i] with image[i] (State t).
+        # We trim the LAST image because it has no future movement.
         if len(img_paths) > len(deltas):
-            img_paths = img_paths[1 : len(deltas) + 1]
+            img_paths = img_paths[: len(deltas)]
 
         min_len = min(len(img_paths), len(deltas))
         img_paths = img_paths[:min_len]
@@ -117,6 +117,19 @@ class KITTIOdometryDataset(Dataset):
 
         for i in range(num_valid_starts):
             self.valid_samples.append((seq_id, i))
+
+    def _rotation_matrix_to_euler_angles(self, R):
+        sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+        singular = sy < 1e-6
+        if not singular:
+            x = np.arctan2(R[2, 1], R[2, 2])
+            y = np.arctan2(-R[2, 0], sy)
+            z = np.arctan2(R[1, 0], R[0, 0])
+        else:
+            x = np.arctan2(-R[1, 2], R[1, 1])
+            y = np.arctan2(-R[2, 0], sy)
+            z = 0
+        return np.array([x, y, z])
 
     def _precompute_deltas(self, pose_file):
         """
@@ -149,25 +162,6 @@ class KITTIOdometryDataset(Dataset):
         # deltas.insert(0, np.zeros(6, dtype=np.float32)) # we trimmed the first image, so no need to pad
         return np.array(deltas)
 
-    def _rotation_matrix_to_euler_angles(self, R):
-        sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-        singular = sy < 1e-6
-        if not singular:
-            x = np.arctan2(R[2, 1], R[2, 2])
-            y = np.arctan2(-R[2, 0], sy)
-            z = np.arctan2(R[1, 0], R[0, 0])
-        else:
-            x = np.arctan2(-R[1, 2], R[1, 1])
-            y = np.arctan2(-R[2, 0], sy)
-            z = 0
-        return np.array([x, y, z])
-
-    def __len__(self):
-        return len(self.valid_samples)
-
-    def num_sequences(self):
-        return len(self.sequence_images)
-
     def __getitem__(self, idx):
         # 1. Get Metadata for this specific window
         seq_id, start_frame = self.valid_samples[idx]
@@ -190,6 +184,12 @@ class KITTIOdometryDataset(Dataset):
 
         # Return (Seq_Len, 3, H, W) and (Seq_Len, 6)
         return torch.stack(images), torch.tensor(np.array(pose_seq))
+
+    def __len__(self):
+        return len(self.valid_samples)
+
+    def num_sequences(self):
+        return len(self.sequence_images)
 
 
 if __name__ == "__main__":

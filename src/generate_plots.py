@@ -10,6 +10,7 @@ from src.utils.visualization import (
     plot_training_curves,
 )
 from src.utils.trajectory import evaluate_and_plot_test_sequences
+from src.utils.dreaming import evaluate_closed_loop
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
@@ -134,6 +135,29 @@ def generate_plots():
             device=device,
         )
         print(f"Saved trajectory plots to {output_dir}")
+
+        # --- 3. Dreaming (Closed Loop) ---
+        print("\n--- Generating Dreaming Plots (Closed Loop) ---")
+        # We need to manually load the dataset for dreaming since evaluate_closed_loop expects it
+        transform = transforms.Compose([
+            transforms.Resize((rnn_cfg.data.img_height, rnn_cfg.data.img_width)),
+            transforms.ToTensor()
+        ])
+        
+        for seq_id in test_sequences:
+            try:
+                dataset = KITTIOdometryDataset(
+                    root_dir=rnn_cfg.data.path,
+                    pose_dir=rnn_cfg.data.pose_path,
+                    train_sequences=[seq_id],
+                    seq_len=rnn_cfg.rnn.sequence_length,
+                    transform=transform
+                )
+                if len(dataset) > 0:
+                    evaluate_closed_loop(rnn, vae, dataset, device, output_dir, seq_id)
+            except Exception as e:
+                print(f"Failed to dream on sequence {seq_id}: {e}")
+
 
     else:
         print(f"RNN checkpoint not found at {rnn_checkpoint_path}")

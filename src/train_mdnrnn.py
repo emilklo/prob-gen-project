@@ -161,7 +161,9 @@ def train_mdnrnn(cfg: Config):
             z_target = z_sequence[:, 1:, :]
 
             # (Batch, Seq_Len-1, 6)
-            pose_target_slice = pose_targets[:, 1:, :]
+            # New Alignment: pose_deltas[t] is movement t -> t+1
+            # So for input z[t], we want action delta[t]
+            pose_target_slice = pose_targets[:, :-1, :]
 
             # C. Forward
             optimizer.zero_grad()

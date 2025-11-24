@@ -4,7 +4,7 @@ vae:
   latent_dim: 128
   sequence_length: 1     # Moved from data
   training:
-    batch_size: 32
+    batch_size: 256
     learning_rate: 1e-3
     epochs: 100
 
@@ -13,7 +13,7 @@ rnn:
   num_layers: 1
   sequence_length: 5     # Moved from data
   training:
-    batch_size: 32
+    batch_size: 512
     learning_rate: 1e-3
     epochs: 100
   
@@ -22,4 +22,4 @@ data:
   # Maintains 3.25:1 ratio, very fast to process
   img_height: 128       
   img_width: 416
-  rnn_sequence_length: 5      # 5 for RNN training
+
