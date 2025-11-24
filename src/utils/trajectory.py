@@ -60,6 +60,7 @@ def evaluate_and_plot_test_sequences(
     epoch: int,
     device: torch.device,
     limit: int = 1000,
+    unique_plots: bool = True,
 ):
     """
     Evaluates the model trajectory using the deterministic Pose Head.
@@ -134,8 +135,10 @@ def evaluate_and_plot_test_sequences(
         plt.legend()
         plt.grid(True, alpha=0.3)
 
-        save_path = get_unique_path(
-            save_dir / f"trajectory_seq{seq_id}_epoch{epoch}.png"
+        save_path = (
+            get_unique_path(save_dir / f"trajectory_seq{seq_id}_epoch{epoch}.png")
+            if unique_plots
+            else save_dir / f"trajectory_seq{seq_id}_epoch{epoch}.png"
         )
         plt.savefig(save_path)
         plt.close()

@@ -193,6 +193,7 @@ def train_mdnrnn_fast(cfg: Config):
                     "model_state_dict": rnn.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "loss": best_loss,
+                    "config": cfg,
                 },
                 checkpoint_dir / "rnn_best.pth",
             )

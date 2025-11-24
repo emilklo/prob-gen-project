@@ -194,10 +194,10 @@ This allows the agent to simulate infinite futures without seeing new data, enab
 By recursively feeding the predicted $z_{t+1}$ back into the RNN ("dreaming") and integrating the predicted pose deltas, we can reconstruct the vehicle's trajectory.
 
 **Test Sequence 09 (Ground Truth vs. Prediction)**:
-![Trajectory Seq 09](outputs/presentation_assets/trajectory_seq09_epoch999_2.png)
+![Trajectory Seq 09](outputs/presentation_assets/trajectory_seq09_epoch999.png)
 
-**Test Sequence 10**:
-![Trajectory Seq 10](outputs/presentation_assets/trajectory_seq10_epoch999_2.png)
+<!-- **Test Sequence 10**:
+![Trajectory Seq 10](outputs/presentation_assets/trajectory_seq10_epoch999.png) -->
 
 ---
 

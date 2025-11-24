@@ -1,5 +1,9 @@
 import torch
 from pathlib import Path
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+
+from src.data.latent_loader import LatentSequenceDataset
 from src.models.conv_vea import ConvVAE
 from src.models.mdnrnn_pose import DreamerMDRNN
 from src.utils.device import get_compute_device, Config
@@ -11,8 +15,6 @@ from src.utils.visualization import (
 )
 from src.utils.trajectory import evaluate_and_plot_test_sequences
 from src.utils.dreaming import evaluate_closed_loop
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
 
 
 def generate_plots():
@@ -24,7 +26,10 @@ def generate_plots():
     vae_checkpoint_path = Path(
         "outputs/vae_z128_img128x416_ep100/checkpoints/vae_epoch_40.pth"
     )
-    rnn_checkpoint_path = Path("outputs/mdnrnn_1/rnn_checkpoints/rnn_best.pth")
+    rnn_checkpoint_path = Path(
+        "outputs/FAST_RNN_1l_h256_bs512/rnn_checkpoints/rnn_best.pth"
+    )
+
     output_dir = Path("outputs/presentation_assets")
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +107,18 @@ def generate_plots():
         )
         # RNN config might be nested or flat, let's check how it was saved
         # In train_mdnrnn.py: "config": cfg (which is a Config object)
-        rnn_cfg = checkpoint["config"]
+        if "config" in checkpoint:
+            rnn_cfg = checkpoint["config"]
+        else:
+            # lets load the json config file if exists
+            config_path = rnn_checkpoint_path.parent.parent / "config.json"
+            if config_path.exists():
+                rnn_cfg = Config.from_file(config_path)
+            else:
+                print("Loading RNN configuration from config.json", config_path)
+                raise ValueError(
+                    "RNN configuration not found in checkpoint or as config.json"
+                )
 
         # Ensure we have the VAE for the RNN evaluation
         # We already loaded 'vae' above, assuming it's the compatible one.
@@ -127,37 +143,40 @@ def generate_plots():
 
         evaluate_and_plot_test_sequences(
             model=rnn,
-            vae=vae,
+            vae=None,
             test_sequences=test_sequences,
             cfg=rnn_cfg,
             save_dir=output_dir,
             epoch=999,
             device=device,
+            unique_plots=False,
         )
         print(f"Saved trajectory plots to {output_dir}")
 
         # --- 3. Dreaming (Closed Loop) ---
         print("\n--- Generating Dreaming Plots (Closed Loop) ---")
-        # We need to manually load the dataset for dreaming since evaluate_closed_loop expects it
-        transform = transforms.Compose([
-            transforms.Resize((rnn_cfg.data.img_height, rnn_cfg.data.img_width)),
-            transforms.ToTensor()
-        ])
-        
+
+        # Path to where you saved the .npz files in the preprocessing step
+        # Assuming standard location:
+        processed_data_dir = "data/processed_latents"
+
         for seq_id in test_sequences:
             try:
-                dataset = KITTIOdometryDataset(
-                    root_dir=rnn_cfg.data.path,
-                    pose_dir=rnn_cfg.data.pose_path,
-                    train_sequences=[seq_id],
+                # Initialize the FAST loader for this specific sequence
+                # We pass sequences=[seq_id] so it only loads the one we want to test
+                dataset = LatentSequenceDataset(
+                    processed_dir=processed_data_dir,
                     seq_len=rnn_cfg.rnn.sequence_length,
-                    transform=transform
+                    select_sequences=[seq_id],
                 )
+
                 if len(dataset) > 0:
                     evaluate_closed_loop(rnn, vae, dataset, device, output_dir, seq_id)
             except Exception as e:
                 print(f"Failed to dream on sequence {seq_id}: {e}")
+                import traceback
 
+                traceback.print_exc()
 
     else:
         print(f"RNN checkpoint not found at {rnn_checkpoint_path}")

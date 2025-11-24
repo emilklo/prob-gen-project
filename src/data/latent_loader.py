@@ -6,7 +6,13 @@ from torch.utils.data import Dataset
 
 
 class LatentSequenceDataset(Dataset):
-    def __init__(self, processed_dir, seq_len=5, test_sequences=None):
+    def __init__(
+        self,
+        processed_dir,
+        seq_len=5,
+        select_sequences: list[str] | None = None,
+        test_sequences: list[str] | None = None,
+    ):
         """
         Args:
             processed_dir: Path to folder containing '00.npz', '01.npz'
@@ -24,6 +30,8 @@ class LatentSequenceDataset(Dataset):
         files = sorted(glob.glob(os.path.join(processed_dir, "*.npz")))
         for seq in test_sequences or []:
             files = [f for f in files if f"'{seq}.npz'" not in f]
+        for seq in select_sequences or []:
+            files = [f for f in files if f"'{seq}.npz'" in f]
 
         current_idx = 0
 
