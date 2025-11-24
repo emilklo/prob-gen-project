@@ -22,3 +22,5 @@ outputs/
 old_code/
 
 data/kitti/
+
+.DS_Store

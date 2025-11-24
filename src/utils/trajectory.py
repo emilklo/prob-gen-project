@@ -1,20 +1,14 @@
-from pathlib import Path
 import torch
 import numpy as np
-
-from src.utils.device import (
-    Config,
-    get_config,
-    get_compute_device,
-)
 import matplotlib.pyplot as plt
-import torchvision.transforms as transforms
+from pathlib import Path
 
-# Import your modules
-from src.data.odometry_loader import KITTIOdometryDataset
-from src.models.mdnrnn_pose import DreamerMDRNN
 from src.models.conv_vea import ConvVAE
+from src.models.mdnrnn_pose import DreamerMDRNN
+from src.utils.device import Config, get_config, get_compute_device
 from src.utils.common import get_unique_path
+
+#
 
 
 def euler_to_matrix(roll, pitch, yaw):
@@ -59,7 +53,7 @@ def integrate_path(deltas_6d):
 
 def evaluate_and_plot_test_sequences(
     model: DreamerMDRNN,
-    vae: ConvVAE,
+    vae: ConvVAE | None,
     test_sequences: list[str],
     cfg: Config,
     save_dir: Path,
@@ -68,97 +62,63 @@ def evaluate_and_plot_test_sequences(
     limit: int = 1000,
 ):
     """
-    Evaluates the model on each test sequence and plots the trajectory.
+    Evaluates the model trajectory using the deterministic Pose Head.
     """
-    print(f"[-] Evaluating on test sequences: {test_sequences}")
+    print(f"[-] Evaluating on: {test_sequences}")
 
-    # Setup transform
-    transform = transforms.Compose(
-        [
-            transforms.Resize((cfg.data.img_height, cfg.data.img_width)),
-            transforms.ToTensor(),
-        ]
-    )
+    # Locate data
+    processed_dir = Path("data/processed_latents")
+    if not processed_dir.exists():
+        processed_dir = Path(cfg.data.path) / "processed_latents"
 
     model.eval()
-    vae.eval()
 
     for seq_id in test_sequences:
-        print(f"    Processing Sequence {seq_id}...")
-
-        # Create a temporary dataset for this sequence
-        try:
-            dataset = KITTIOdometryDataset(
-                root_dir=cfg.data.path,
-                pose_dir=cfg.data.pose_path,
-                train_sequences=[seq_id],  # Only load this specific sequence
-                seq_len=cfg.rnn.sequence_length,
-                transform=transform,
-            )
-        except Exception as e:
-            print(f"    [!] Failed to load sequence {seq_id}: {e}")
+        npz_path = processed_dir / f"{seq_id}.npz"
+        if not npz_path.exists():
             continue
 
-        if len(dataset) == 0:
-            print(f"    [!] Sequence {seq_id} is empty or invalid.")
+        print(f"    Processing Sequence {seq_id}...")
+
+        try:
+            data = np.load(npz_path)
+            mus = torch.from_numpy(data["mu"]).float().to(device)
+            poses = data["pose"]
+        except Exception as e:
+            print(f"    [!] Error loading {npz_path}: {e}")
             continue
 
         pred_deltas = []
         true_deltas = []
         hidden = None
 
-        # Limit frames for faster plotting during training if needed,
-        # but usually we want the full test sequence.
-        limit = min(limit, len(dataset))
+        num_steps = min(len(mus) - 1, limit)
 
         with torch.no_grad():
-            for i in range(limit):
-                imgs, poses = dataset[i]  # imgs shape: (Seq, 3, H, W)
+            for t in range(num_steps):
+                # Input: Current latent z_t
+                z_t = mus[t].unsqueeze(0).unsqueeze(0)  # (1, 1, 32)
 
-                # Prepare Input (Frame t)
-                # We only need the first frame of the sequence window to predict the next step
-                # But wait, the RNN needs a sequence.
-                # Actually, for trajectory generation, we usually feed:
-                # z_t -> RNN -> z_t+1, pose_delta_t
-                # Here we are doing open-loop or closed-loop?
-                # The previous code did: z = vae.encode(img_t0) -> rnn(z, hidden)
-                # This implies we are feeding GROUND TRUTH images at each step (Open Loop for images),
-                # but accumulating the predicted pose deltas.
+                # Forward Pass
+                # We ignore the MDN outputs (pi, mu, sigma) because they represent
+                # the *next latent image*, not the movement.
+                # We take 'pred_pose' which is the movement.
+                _, _, _, pred_pose, hidden = model(z_t, hidden)
 
-                img_t0 = imgs[0].unsqueeze(0).to(device)
-
-                # Encode
-                z = vae.encode(img_t0).unsqueeze(1)  # Shape: (1, 1, Latent)
-
-                # RNN Step
-                pi, mu, sigma, pred_pose, hidden = model(z, hidden)
-
-                # Extract Prediction (Movement t -> t+1)
+                # Extract Prediction
+                # pred_pose shape is (Batch=1, Seq=1, 6)
                 pred_d = pred_pose[0, 0].cpu().numpy()
 
-                # Extract Ground Truth (Delta stored at index 1 of the window)
-                # The dataset returns a window of poses.
-                # poses[0] is pose at t, poses[1] is pose at t+1.
-                # The delta we want is the movement FROM t TO t+1.
-                # The dataset's 'sequence_deltas' are precomputed deltas.
-                # dataset[i] returns (images, pose_seq).
-                # pose_seq contains [delta_t, delta_t+1, ...].
-                # So pose_seq[0] is the delta for the first step in this window.
-
-                # Wait, let's check KITTIOdometryDataset.__getitem__
-                # It returns `pose_seq = all_deltas[start_frame : start_frame + self.seq_len]`
-                # So poses[0] IS the delta for the current frame t.
-
-                true_d = poses[0].cpu().numpy()
+                # Ground Truth
+                true_d = poses[t]
 
                 pred_deltas.append(pred_d)
                 true_deltas.append(true_d)
 
-        # Integrate
+        # Integrate and Plot
         path_pred = integrate_path(pred_deltas)
         path_true = integrate_path(true_deltas)
 
-        # Plot
         plt.figure(figsize=(10, 10))
         plt.plot(
             path_true[:, 0], path_true[:, 2], "k-", label="Ground Truth", linewidth=2
@@ -167,7 +127,7 @@ def evaluate_and_plot_test_sequences(
             path_pred[:, 0], path_pred[:, 2], "r--", label="Ours (RNN)", linewidth=2
         )
 
-        plt.title(f"Trajectory Result (Seq {seq_id}, Epoch {epoch})")
+        plt.title(f"Trajectory (Seq {seq_id}, Epoch {epoch})")
         plt.xlabel("X (meters)")
         plt.ylabel("Z (meters)")
         plt.axis("equal")
@@ -183,53 +143,36 @@ def evaluate_and_plot_test_sequences(
 
 
 def main():
-    # 1. Define Model Path (Hardcoded for standalone execution)
-    # You might want to make these arguments or read from a specific run config
-    rnn_path = Path("outputs/mdnrnn_1/rnn_checkpoints/rnn_best.pth")
-    vae_path = Path("outputs/vae_z128_img128x416_ep100/checkpoints/vae_epoch_40.pth")
+    # 1. Configuration
+    # Path to where your '00.npz', '01.npz' files are stored
+    processed_latents_dir = Path("data/processed_latents")
 
-    # 2. Load Configuration from Model Path
+    rnn_path = Path("outputs/FAST_RNN_1l_h256_bs512/rnn_checkpoints/rnn_best.pth")
+
+    # We assume config lies relative to the model path
     run_dir = rnn_path.parent.parent
     config_path = run_dir / "config.json"
 
+    # 2. Load Config
     print(f"[-] Loading Config from {config_path}")
     if config_path.exists():
-
         cfg = Config.from_file(config_path)
-
-        # Override device with current best available if needed, or trust config?
-        # Usually we want to use the best available device for inference
         device = get_compute_device()
-        print(f"    Config loaded. Run Name: {cfg.run_name}")
     else:
         print(f"[!] Config not found at {config_path}. Falling back to default.")
         cfg = get_config()
         device = get_compute_device()
 
-    print("[-] Evaluation Config Loaded.")
     print(f"    Latent Dim: {cfg.vae.latent_dim}")
     print(f"    RNN Layers: {cfg.rnn.num_layers}")
 
-    # 3. Initialize Models
-    vae = ConvVAE(
-        latent_dim=cfg.vae.latent_dim,
-        img_height=cfg.data.img_height,
-        img_width=cfg.data.img_width,
-    ).to(device)
-
+    # 3. Initialize RNN
+    # Note: VAE is NOT needed for trajectory eval since we load latents directly!
     rnn = DreamerMDRNN(
         latent_dim=cfg.vae.latent_dim,
         hidden_size=cfg.rnn.hidden_size,
         num_layers=cfg.rnn.num_layers,
     ).to(device)
-
-    print(f"[-] Loading VAE: {vae_path}")
-    if vae_path.exists():
-        vae.load_state_dict(
-            torch.load(vae_path, map_location=device)["model_state_dict"]
-        )
-    else:
-        print(f"[!] Warning: VAE checkpoint not found at {vae_path}")
 
     print(f"[-] Loading RNN: {rnn_path}")
     if rnn_path.exists():
@@ -245,11 +188,14 @@ def main():
     save_dir = run_dir / "trajectories"
     save_dir.mkdir(parents=True, exist_ok=True)
 
+    # Ensure we have sequences to test (e.g. ['09', '10'])
     test_sequences = cfg.data.test_sequences
+    if not test_sequences:
+        test_sequences = ["09", "10"]  # Fallback
 
     evaluate_and_plot_test_sequences(
         model=rnn,
-        vae=vae,
+        vae=None,  # VAE not needed here
         test_sequences=test_sequences,
         cfg=cfg,
         save_dir=save_dir,
