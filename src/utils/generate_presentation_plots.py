@@ -15,6 +15,7 @@ from src.utils.visualization import (
 )
 from src.utils.trajectory import evaluate_and_plot_test_sequences
 from src.utils.dreaming import evaluate_closed_loop
+from src.utils.plots.vis_insight import plot_pose_insight
 
 
 def generate_plots():
@@ -32,6 +33,14 @@ def generate_plots():
 
     output_dir = Path("outputs/presentation_assets")
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- NEW: Generate the Insight Plot FIRST ---
+    # This doesn't require loading models, so it's quick.
+    # Sequence '00' is usually the best example for this.
+    raw_pose_dir = "data/kitti/poses"
+    processed_data_dir = "data/processed_latents"
+    plot_pose_insight(raw_pose_dir, processed_data_dir, output_dir, seq_id="00")
+    # --------------------------------------------
 
     # --- 1. VAE Visualizations ---
     print("\n--- Generating VAE Visualizations ---")
