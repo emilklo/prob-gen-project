@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from config.config import LATENT_DIM
-
 
 class ConvVAE(nn.Module):
     """
@@ -12,9 +10,7 @@ class ConvVAE(nn.Module):
     Supports both square and rectangular images.
     """
 
-    def __init__(
-        self, latent_dim=LATENT_DIM, img_size=None, img_height=None, img_width=None
-    ):
+    def __init__(self, latent_dim, img_size=None, img_height=None, img_width=None):
         super().__init__()
         self.latent_dim = latent_dim
 

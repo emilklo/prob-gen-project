@@ -4,13 +4,11 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Tuple, Optional
 
-from config.config import LATENT_DIM
-
 
 class DreamerMDRNN(nn.Module):
     def __init__(
         self,
-        latent_dim: int = LATENT_DIM,
+        latent_dim: int,
         hidden_size: int = 256,
         num_layers: int = 2,
         num_gaussians: int = 5,

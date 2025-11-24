@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 from config.logging import get_logger
 from src.data.odometry_loader import KITTIOdometryDataset
 from src.models.mdnrnn_pose import DreamerMDRNN
-from models.conv_vea import ConvVAE
+from src.models.conv_vea import ConvVAE
 from src.utils.device import Config, get_config
 
 logger = get_logger(__name__)

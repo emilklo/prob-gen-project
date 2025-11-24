@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from tqdm import tqdm
 
-from models.conv_vea import ConvVAE
+from src.models.conv_vea import ConvVAE
 from src.data.loaders import KITTIDataset
 from src.utils.visualization import (
     save_reconstruction_comparison,
@@ -110,7 +110,7 @@ def train_vae(cfg: Config):
     model = ConvVAE(
         latent_dim=latent_dim, img_height=img_height, img_width=img_width
     ).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=float(lr))
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
