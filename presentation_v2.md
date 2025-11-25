@@ -285,7 +285,7 @@ The true power of the World Model is **Latent Dreaming** (Closed-Loop Prediction
 This allows the agent to simulate infinite futures without seeing new data, enabling planning in a "dream" environment.
 
 **Dreaming Result (Sequence 09)**:
-![Dreaming Trajectory with Drift Highl![Dreaming Seq 09](outputs/presentation_assets/dreaming_seq09_1.png)
+![Dreaming Trajectory with Drift Highl![Dreaming Seq 09](outputs/presentation_assets/dreaming_seq09.png)
 
 > [!NOTE]
 > **Drift Explained**: The blue line shows the "hallucinated" trajectory where the model feeds its own predictions back into itself. Notice how it diverges from ground truth (black) after ~50 meters. This is **accumulated error**—small prediction mistakes compound over time. For RL planning (which only needs 5-10 seconds lookahead), this is acceptable. For long-term map prediction, we would need state correction mechanisms.
@@ -293,7 +293,7 @@ This allows the agent to simulate infinite futures without seeing new data, enab
 ### 4.8 Results: Trajectory Prediction
 
 **Test Sequence 09 (Open-Loop Trajectory Integration)**:
-![Trajectory comparison showing accumul![Trajectory Seq 09](outputs/presentation_assets/trajectory_seq09_epoch999_1.png)
+![Trajectory comparison showing accumul]!(outputs/presentation_assets/trajectory_seq09_epoch999.png)
 
 **Key Observations**:
 - ✅ **Short-term accuracy**: First 30 meters are nearly perfect
