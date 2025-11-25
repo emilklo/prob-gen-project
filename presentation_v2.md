@@ -1,5 +1,4 @@
 # Probabilistic World Models for Autonomous Driving
-**Graduate Project Presentation**
 
 ## 1. Introduction: The Brain in the Box
 
@@ -100,20 +99,48 @@ def reparameterize(self, mu, logvar):
     return mu + eps * std
 ```
 
-### 3.4 Results: Show, Don't Tell
+## 3.4 VAE Results: Reconstruction vs. Hallucination
+
 
 **Reconstruction (The Input)**
-![Reconstruction Quality](outputs/presentation_assets/reconstruction_epoch_0040.png)
+![Reconstruction](outputs/presentation_assets/reconstruction_epoch_0040.png)
 
-> [!TIP]
-> **High Fidelity**: The model successfully captures lane curvature, car positions, and shadows. This confirms the encoder preserves the *semantic* information needed for driving.
+> [!note]
+> **Medium Fidelity**: The model successfully captures lane curvature, car positions, and shadows.
 
 <!-- slide -->
 **Random Sampling (The Prior)**
-![Random samples from the learned latent space](outputs/presentation_assets/samples_epoch_0040.png)
+![Random samples from the learned!](outputs/presentation_assets/samples_epoch_0040.png)
 
 > [!WARNING]
 > **Low Fidelity**: Random samples drawn from the standard normal prior $\mathcal{N}(0, I)$ are noisy/blurry. This indicates the latent space is not perfectly continuous.
+
+
+
+### The Observation
+* **Random Sampling ($z \sim \mathcal{N}(0,I)$)**: Produces invalid/blurry states.
+* **Implication**: The latent space has "holes"—regions where the VAE did not map any real training data.
+
+### Does this hurt the Trajectory Prediction?
+**Yes, it creates a stability risk.**
+
+1.  **The Feedback Loop Danger**:
+    * In "Dreaming" (Open Loop), we sample $z_{t+1}$ and feed it back into the RNN as the next input.
+    * 
+    * If the RNN predicts a $z$ that falls into a "hole" (off the data manifold), we are feeding the neural network an input it has never seen before (Out-Of-Distribution).
+
+2.  **Garbage In, Garbage Out**:
+    * Neural Networks behave unpredictably on Out-Of-Distribution data.
+    * If $z$ is invalid $\rightarrow$ Hidden State $h$ becomes corrupted $\rightarrow$ **Pose Prediction becomes erratic.**
+
+3. **Constraint**: Fixing the "holes" in the latent space requires a trade-off:
+   *  **More Aggressive KL-Divergence**: This packs the space tighter but degrades reconstruction quality (the model ignores fine details).
+   *  **GAN-based Decoder**: This forces sharpness but is unstable and too computationally expensive for a laptop to train reliably.
+
+#### Conclusion
+Even though we don't use the Decoder for driving, the **geometry** of the latent space matters.
+* **Ideal**: A perfectly dense latent space (all $z$ are valid).
+* **Reality**: Our space has gaps. If the "dream" falls into a gap, the physics simulation may diverge or collapse.
 
 ---
 
@@ -136,7 +163,7 @@ $$
 $$
 
 ### 4.2 Architecture Explained
-The **DreamerMDRNN** is composed of three distinct parts working in unison:
+The **DreamerMDRNN** is composed of three distinct parts working in together:
 
 1.  **The Memory (LSTM)**:
     *   Acts as the brain of the model. It receives the compressed visual information ($z_t$) and updates its internal hidden state ($h_t$).
@@ -258,15 +285,15 @@ The true power of the World Model is **Latent Dreaming** (Closed-Loop Prediction
 This allows the agent to simulate infinite futures without seeing new data, enabling planning in a "dream" environment.
 
 **Dreaming Result (Sequence 09)**:
-![Dreaming Trajectory with Drift Highlighted](outputs/presentation_assets/dreaming_seq09.png)
+![Dreaming Trajectory with Drift Highl![Dreaming Seq 09](outputs/presentation_assets/dreaming_seq09_1.png)
 
 > [!NOTE]
 > **Drift Explained**: The blue line shows the "hallucinated" trajectory where the model feeds its own predictions back into itself. Notice how it diverges from ground truth (black) after ~50 meters. This is **accumulated error**—small prediction mistakes compound over time. For RL planning (which only needs 5-10 seconds lookahead), this is acceptable. For long-term map prediction, we would need state correction mechanisms.
 
 ### 4.8 Results: Trajectory Prediction
 
-**Test Sequence 09 (Ground Truth vs. Prediction)**:
-![Trajectory comparison showing accumulated drift](outputs/presentation_assets/trajectory_seq09_epoch999.png)
+**Test Sequence 09 (Open-Loop Trajectory Integration)**:
+![Trajectory comparison showing accumul![Trajectory Seq 09](outputs/presentation_assets/trajectory_seq09_epoch999_1.png)
 
 **Key Observations**:
 - ✅ **Short-term accuracy**: First 30 meters are nearly perfect
@@ -299,9 +326,9 @@ This architecture forms the foundation for **Model-Based Reinforcement Learning*
 - Learn from imagination rather than expensive real-world trial-and-error
 
 ### Future Directions
+- Make a more realistic Dreaming environment by improving latent space
 - Implement **Controller (C)**: Use the World Model to train an RL agent to drive
 - Address drift with **state correction** or **longer training sequences**
-- Scale to **multi-agent scenarios** (other vehicles have their own World Models)
 
 ---
 

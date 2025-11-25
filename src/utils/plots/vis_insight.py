@@ -84,8 +84,8 @@ def plot_pose_insight(raw_pose_dir, processed_pose_dir, output_dir, seq_id="00")
     ax2.scatter(delta_x_forward, delta_z_lateral, alpha=0.4, s=5, c="purple")
 
     ax2.set_title("Our Approach: Pose Deltas (Local)", fontsize=14, fontweight="bold")
-    ax2.set_xlabel("Forward Movement ($\Delta x$) (meters/frame)", fontsize=12)
-    ax2.set_ylabel("Lateral Movement ($\Delta z$) (meters/frame)", fontsize=12)
+    ax2.set_xlabel(r"Lateral Movement ($\Delta x$) (meters/frame)", fontsize=12)
+    ax2.set_ylabel(r"Forward Movement ($\Delta z$) (meters/frame)", fontsize=12)
     ax2.axis("equal")  # Important to show scale difference
     ax2.grid(True, linestyle="--", alpha=0.6)
 

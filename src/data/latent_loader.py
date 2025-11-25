@@ -29,9 +29,9 @@ class LatentSequenceDataset(Dataset):
 
         files = sorted(glob.glob(os.path.join(processed_dir, "*.npz")))
         for seq in test_sequences or []:
-            files = [f for f in files if f"'{seq}.npz'" not in f]
+            files = [f for f in files if f"{seq}.npz" not in f]
         for seq in select_sequences or []:
-            files = [f for f in files if f"'{seq}.npz'" in f]
+            files = [f for f in files if f"{seq}.npz" in f]
 
         current_idx = 0
 

@@ -180,7 +180,7 @@ def generate_plots():
                 )
 
                 if len(dataset) > 0:
-                    evaluate_closed_loop(rnn, vae, dataset, device, output_dir, seq_id)
+                    evaluate_closed_loop(rnn, None, dataset, device, output_dir, seq_id)
             except Exception as e:
                 print(f"Failed to dream on sequence {seq_id}: {e}")
                 import traceback

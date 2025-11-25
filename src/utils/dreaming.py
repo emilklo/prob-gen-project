@@ -36,26 +36,52 @@ def sample_from_mdn(pi, mu, sigma):
 
 def evaluate_closed_loop(model, vae, dataset, device, save_dir, seq_id, limit=1000):
     model.eval()
-    vae.eval()
+    if vae is not None:
+        vae.eval()
     
-    # 1. INITIALIZATION (t=0)
-    # We only take the VERY FIRST frame from the dataset
-    imgs, poses = dataset[0] 
-    
-    # Ground Truth for plotting comparison
-    true_deltas_all = []
-    
-    # Get the initial z from the REAL first image
-    img_t0 = imgs[0].unsqueeze(0).to(device)
-    current_z = vae.encode(img_t0).unsqueeze(1) # z_0 (Batch=1, Seq=1, Latent)
-    
+    # 1. WARMUP (t=0 to t=warmup_steps)
+    # Access full sequence directly if possible (LatentSequenceDataset loads all into memory)
+    if hasattr(dataset, 'all_mus') and len(dataset.all_mus) > 0:
+        # Assuming dataset was initialized with select_sequences=[seq_id], so index 0 is correct
+        full_z = dataset.all_mus[0].to(device) # (Total_Frames, Latent)
+        full_poses = dataset.all_poses[0].to(device)
+    else:
+        raise ValueError("Dataset does not have 'all_mus' attribute or is empty.")
+
+    warmup_steps = 5
     hidden = None
     pred_deltas = []
     
+    print(f"    [-] Warming up RNN with first {warmup_steps} frames...")
+    
+    # Feed warmup sequence
+    # We want to feed z_0, z_1, ..., z_4 to update hidden state
+    warmup_z = full_z[:warmup_steps].unsqueeze(0) # (1, Warmup, Latent)
+    
+    with torch.no_grad():
+        # Pass the entire warmup sequence at once (RNN handles sequence)
+        pi, mu, sigma, pred_pose, hidden = model(warmup_z, hidden)
+        
+        # Collect warmup ground truth deltas for plotting continuity
+        # (Optional: we could use predicted deltas during warmup too)
+        warmup_deltas = full_poses[:warmup_steps, :].cpu().numpy()
+        for i in range(warmup_steps):
+             # For plotting, we can use GT or Pred. Let's use GT for "History" context.
+             # Note: pred_pose is (1, Warmup, 6)
+             pred_deltas.append(warmup_deltas[i])
+
+        # The last output of the warmup (t=4) predicts t=5.
+        # We sample z_5 from this prediction to start the dream.
+        last_pi = pi[:, -1, :].unsqueeze(1)
+        last_mu = mu[:, -1, :].unsqueeze(1)
+        last_sigma = sigma[:, -1, :].unsqueeze(1)
+        
+        current_z = sample_from_mdn(last_pi, last_mu, last_sigma)
+        
     print(f"    [-] Starting Dreaming (Closed Loop) for Sequence {seq_id}...")
     
     with torch.no_grad():
-        for i in range(limit):
+        for i in range(limit - warmup_steps):
             # A. PREDICT NEXT STEP
             # We feed the *previous* z (which might be real or imagined)
             pi, mu, sigma, pred_pose, hidden = model(current_z, hidden)
@@ -70,10 +96,19 @@ def evaluate_closed_loop(model, vae, dataset, device, save_dir, seq_id, limit=10
             current_z = sample_from_mdn(pi, mu, sigma)
             
             # (Optional) Collect Ground Truth for this step to compare later
-            # We have to grab it from the dataset manually since we aren't iterating it
-            if i < len(dataset):
-                _, true_poses = dataset[i]
-                true_deltas_all.append(true_poses[0].cpu().numpy())
+            # We can grab it from full_poses
+            # i goes from 0 to limit-warmup.
+            # The current step corresponds to t = warmup + i
+            # But we are predicting for t+1.
+            # Let's just collect ALL ground truth at the end or slice it now.
+            pass
+                
+    # Collect ALL ground truth for the duration
+    # We simulated 'limit' steps total (warmup + dream)
+    # Actually, loop ran (limit - warmup) times.
+    # Total steps = warmup + (limit - warmup) = limit.
+    # We need GT for 0 to limit.
+    true_deltas_all = full_poses[:limit].cpu().numpy()
                 
     # Integrate
     path_pred = integrate_path(pred_deltas)
